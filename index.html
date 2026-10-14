@@ -130,6 +130,7 @@ td.num,th.num{text-align:right}
 <script>
 const SUPABASE_URL = "https://fqkimypjlxdsytcvoyal.supabase.co";
 const SUPABASE_KEY = "sb_publishable_dVJpG6Ib7UjwtWg-aX3mNw_UrLpKF0U";
+if(typeof supabase==="undefined"){ document.getElementById("root").innerHTML='<div style="max-width:380px;margin:20vh auto;padding:16px;font-family:sans-serif;text-align:center"><h2>Sin conexión</h2><p>No se pudo cargar la app. Revisá que el iPad tenga internet y volvé a abrirla.</p><button onclick="location.reload()" style="padding:12px 20px;font-size:16px">Reintentar</button></div>'; throw new Error("sin supabase"); }
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 
 /* ---------- utilidades ---------- */
@@ -602,17 +603,31 @@ function confirmar(msg){ return new Promise(res=>{ const bg=document.createEleme
 
 /* ---------- arranque ---------- */
 let enRecuperacion = false;
-sb.auth.onAuthStateChange(async (ev, s) => {
-  if(ev==="PASSWORD_RECOVERY"){ enRecuperacion=true; session=s; return pantallaNuevaClave(); }
-  if(ev==="INITIAL_SESSION"||ev==="SIGNED_IN"||ev==="SIGNED_OUT"){
-    if(enRecuperacion) return;
+/* Importante: no llamar a Supabase dentro del callback de auth (bloquea la sesión guardada y deja la pantalla en blanco).
+   Por eso el trabajo se difiere con setTimeout. */
+let arrancando = false;
+async function arrancar(s){
+  if(arrancando) return; arrancando = true;
+  try{
     session = s;
     if(!session) return pantallaLogin();
+    $("#root").innerHTML = `<div class="login"><div class="brand">Eternal Secret<small>Cargando…</small></div></div>`;
     await verificarAcceso();
     if(!autorizado) return pantallaSinPermiso();
-    shell(); await contarAlertas(); shell(); render();
+    await contarAlertas(); shell(); render();
+  }catch(e){ console.error(e); pantallaLogin("No se pudo conectar. Revisá internet y volvé a intentar."); }
+  finally{ arrancando = false; }
+}
+sb.auth.onAuthStateChange((ev, s) => {
+  if(ev==="PASSWORD_RECOVERY"){ enRecuperacion=true; session=s; setTimeout(pantallaNuevaClave,0); return; }
+  if(ev==="INITIAL_SESSION"||ev==="SIGNED_IN"||ev==="SIGNED_OUT"){
+    if(enRecuperacion) return;
+    if(ev==="SIGNED_IN" && session && s && session.user.id===s.user.id && $("#view")) { session=s; return; } // al volver a la app no recargar todo
+    setTimeout(()=>arrancar(s),0);
   }
 });
+// Red de seguridad: si en 6 segundos no apareció nada, mostrar el login
+setTimeout(()=>{ if(!$("#root").innerHTML.trim()) pantallaLogin(); },6000);
 </script>
 </body>
 </html>
