@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Eternal Secret</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Eternal">
+<meta name="theme-color" content="#5B2A4C">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+/* Layout: barra lateral (iPad horizontal) / barra inferior (vertical y celular); contenido en tarjetas sobrias */
+:root{
+  --bg:#F6F3F5; --surface:#FFFFFF; --surface2:#F0EAEE; --line:#E2D8DE;
+  --ink:#241A21; --ink2:#6B5A65; --accent:#5B2A4C; --accent-ink:#FFFFFF; --accent-soft:#EEDFE8;
+  --ok:#2E7D5B; --ok-soft:#E3F2EA; --warn:#A86A00; --warn-soft:#FBEFD9; --bad:#B3261E; --bad-soft:#FBE4E2; --info:#2F5D9E; --info-soft:#E3ECF8;
+  --display:"Newsreader", Georgia, serif; --body:"Figtree", -apple-system, "Segoe UI", sans-serif;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#17121A; --surface:#211A24; --surface2:#2A2230; --line:#3A3040;
+  --ink:#F2EAF0; --ink2:#B7A6B2; --accent:#D9A6C8; --accent-ink:#2A1224; --accent-soft:#3B2636;
+  --ok:#6FCB9F; --ok-soft:#1E3529; --warn:#E8B655; --warn-soft:#3A2E17; --bad:#F2928A; --bad-soft:#3D2120; --info:#8DB4EC; --info-soft:#1D2A3D;
+  color-scheme:dark; } }
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:16px/1.45 var(--body);-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}
+.app{display:flex;min-height:100%}
+nav.side{width:220px;flex:none;background:var(--surface);border-right:1px solid var(--line);padding:calc(env(safe-area-inset-top,0px) + 20px) 14px 20px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:4px}
+.brand{font-family:var(--display);font-size:24px;color:var(--accent);padding:4px 10px 16px;line-height:1.1}
+.brand small{display:block;font-family:var(--body);font-size:12px;color:var(--ink2);letter-spacing:.06em;text-transform:uppercase;margin-top:4px}
+.navbtn{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:10px;color:var(--ink);text-decoration:none;font-weight:500}
+.navbtn svg{width:20px;height:20px;flex:none}
+.navbtn.on{background:var(--accent-soft);color:var(--accent)}
+.navbtn .dot{margin-left:auto;background:var(--bad);color:#fff;border-radius:99px;font-size:12px;padding:1px 7px}
+.side .spacer{flex:1}
+main{flex:1;min-width:0;padding:calc(env(safe-area-inset-top,0px) + 20px) 24px 100px}
+.wrap{max-width:1100px;margin:0 auto}
+nav.bottom{display:none}
+@media (max-width:820px){
+  nav.side{display:none}
+  main{padding:calc(env(safe-area-inset-top,0px) + 14px) 16px calc(env(safe-area-inset-bottom,0px) + 90px)}
+  nav.bottom{display:flex;position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:6px 4px calc(env(safe-area-inset-bottom,0px) + 6px);z-index:20}
+  nav.bottom .navbtn{flex:1;flex-direction:column;gap:2px;font-size:11px;padding:6px 2px;position:relative}
+  nav.bottom .navbtn .dot{position:absolute;top:2px;right:18%;margin:0;font-size:10px}
+}
+h1{font-family:var(--display);font-weight:600;font-size:30px;margin:4px 0 4px;text-wrap:balance}
+h2{font-family:var(--display);font-weight:600;font-size:21px;margin:0 0 10px}
+h3{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink2);margin:18px 0 8px;font-weight:600}
+.sub{color:var(--ink2);margin:0 0 18px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.card.tight{padding:0;overflow:hidden}
+.stat .n{font-family:var(--display);font-size:30px;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat .l{color:var(--ink2);font-size:14px}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);border-radius:11px;padding:10px 16px;min-height:44px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:var(--ink)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--accent)}
+.btn.danger{color:var(--bad)}
+.btn:disabled{opacity:.5}
+.btn:focus-visible,.navbtn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+label.f{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--ink2);font-weight:600;min-width:0}
+input,select,textarea{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px;min-height:44px;width:100%;font-size:16px}
+textarea{min-height:80px;resize:vertical}
+.fields{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.fields .wide{grid-column:1/-1}
+.search{position:relative}
+.search input{padding-left:40px}
+.search svg{position:absolute;left:12px;top:12px;width:20px;height:20px;color:var(--ink2)}
+.list{list-style:none;margin:0;padding:0}
+.list li{border-top:1px solid var(--line)}
+.list li:first-child{border-top:none}
+.item{display:flex;align-items:center;gap:12px;padding:12px 16px;text-decoration:none;color:var(--ink);min-height:56px}
+.item:hover{background:var(--surface2)}
+.item .main{flex:1;min-width:0}
+.item .t{font-weight:600}
+.item .s{color:var(--ink2);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill{display:inline-block;border-radius:99px;padding:2px 10px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.p-est{background:#F6DDEA;color:#8A2C61}.p-fun{background:#DDEFE5;color:#25694B}.p-amb{background:var(--surface2);color:var(--ink2)}
+@media (prefers-color-scheme: dark){.p-est{background:#43233A;color:#F0B5D8}.p-fun{background:#1F3A2C;color:#9BDDB9}}
+.s-ok{background:var(--ok-soft);color:var(--ok)}.s-warn{background:var(--warn-soft);color:var(--warn)}.s-bad{background:var(--bad-soft);color:var(--bad)}.s-info{background:var(--info-soft);color:var(--info)}.s-none{background:var(--surface2);color:var(--ink2)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:18px 0 14px;overflow-x:auto}
+.tab{appearance:none;border:none;background:none;padding:10px 14px;font-weight:600;color:var(--ink2);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;min-height:44px}
+.tab.on{color:var(--accent);border-color:var(--accent)}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12.5px;color:var(--ink2);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+td.num,th.num{text-align:right}
+.muted{color:var(--ink2)}
+.empty{padding:28px;text-align:center;color:var(--ink2)}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:12px;font-weight:600;z-index:50;max-width:90vw}
+.modal-bg{position:fixed;inset:0;background:rgba(20,10,18,.45);z-index:40;display:flex;align-items:flex-end;justify-content:center}
+@media (min-width:821px){.modal-bg{align-items:center}}
+.modal{background:var(--bg);width:min(760px,100%);max-height:92vh;overflow:auto;border-radius:18px 18px 0 0;padding:20px 18px calc(env(safe-area-inset-bottom,0px) + 20px)}
+@media (min-width:821px){.modal{border-radius:18px}}
+.modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.itemrow{display:grid;grid-template-columns:130px 1fr 80px 120px 40px;gap:8px;align-items:end;padding:10px 0;border-top:1px dashed var(--line)}
+@media (max-width:640px){.itemrow{grid-template-columns:1fr 1fr}.itemrow .x{justify-self:end}}
+.iconbtn{appearance:none;border:none;background:none;width:40px;height:44px;cursor:pointer;color:var(--ink2);font-size:22px}
+.labgroup{margin-bottom:8px}
+.labrow{display:grid;grid-template-columns:1fr 110px 90px;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
+.labrow .rng{font-size:12.5px;color:var(--ink2)}
+.evo{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.evo .card{padding:12px 14px}
+.evo svg{width:100%;height:auto;display:block}
+.login{max-width:380px;margin:12vh auto;padding:0 16px}
+.login .brand{text-align:center;font-size:34px;padding-bottom:6px}
+.bar{height:10px;border-radius:6px;background:var(--surface2);overflow:hidden}
+.bar span{display:block;height:100%;background:var(--accent)}
+.right{margin-left:auto}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const SUPABASE_URL = "https://fqkimypjlxdsytcvoyal.supabase.co";
+const SUPABASE_KEY = "sb_publishable_dVJpG6Ib7UjwtWg-aX3mNw_UrLpKF0U";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+
+/* ---------- utilidades ---------- */
+const $ = (s, el=document) => el.querySelector(s);
+const esc = s => (s ?? "").toString().replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pesos = n => (n==null||isNaN(n)) ? "—" : "$ " + Math.round(Number(n)).toLocaleString("es-AR");
+const num = n => (n==null||n==="") ? "—" : Number(n).toLocaleString("es-AR",{maximumFractionDigits:2});
+const hoy = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+const fecha = s => { if(!s) return "—"; const [y,m,d]=s.slice(0,10).split("-"); return `${d}/${m}/${y}`; };
+const MESES=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+const fechaCorta = s => { if(!s) return "—"; const [y,m,d]=s.slice(0,10).split("-"); return `${+d} ${MESES[+m-1]} ${y.slice(2)}`; };
+const areaPill = a => !a ? "" : `<span class="pill ${a==="Estética"?"p-est":a==="Funcional"?"p-fun":"p-amb"}">${esc(a)}</span>`;
+const estadoClase = e => ({"Óptimo":"s-ok","Normal":"s-ok","Fuera del óptimo":"s-warn","Alto":"s-bad","Bajo":"s-info","Sin rango":"s-none"}[e]||"s-none");
+const alertaClase = a => ({"Sin stock":"s-bad","Vencido":"s-bad","Vence en menos de 30 días":"s-warn","Stock bajo":"s-warn"}[a]||"s-ok");
+function toast(msg){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); }
+function fail(e){ console.error(e); toast("No se pudo guardar: " + (e?.message||e)); }
+const ICON = {
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>',
+  pac:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>',
+  stock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>',
+  fact:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+  conf:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>'
+};
+
+/* ---------- cache de catálogos ---------- */
+const cache = {};
+async function catalogo(nombre, force=false){
+  if(cache[nombre] && !force) return cache[nombre];
+  let q;
+  if(nombre==="determinaciones") q = sb.from("determinaciones").select("*").order("orden");
+  if(nombre==="tratamientos") q = sb.from("tratamientos").select("*").order("nombre");
+  if(nombre==="productos") q = sb.from("v_stock").select("*").order("nombre");
+  const { data, error } = await q; if(error) throw error;
+  return cache[nombre] = data;
+}
+
+/* ---------- autenticación ---------- */
+let session = null, autorizado = false, alertasStock = 0;
+async function verificarAcceso(){
+  const { count } = await sb.from("determinaciones").select("id", { count:"exact", head:true });
+  autorizado = (count||0) > 0;
+}
+function pantallaLogin(msg=""){
+  $("#root").innerHTML = `
+  <div class="login">
+    <div class="brand">Eternal Secret<small>Consultorio</small></div>
+    <div class="card">
+      <form id="flog" class="grid">
+        <label class="f">Email<input id="lemail" type="email" autocomplete="username" required></label>
+        <label class="f">Contraseña<input id="lpass" type="password" autocomplete="current-password" required minlength="6"></label>
+        <button class="btn pri" type="submit">Entrar</button>
+        <div class="row"><button class="btn ghost" type="button" id="bcrear">Crear mi usuario</button><button class="btn ghost right" type="button" id="bolvido">Olvidé la contraseña</button></div>
+        <p class="muted" id="lmsg" style="margin:0">${esc(msg)}</p>
+      </form>
+    </div>
+  </div>`;
+  $("#flog").onsubmit = async e => { e.preventDefault();
+    const { error } = await sb.auth.signInWithPassword({ email: $("#lemail").value.trim(), password: $("#lpass").value });
+    if(error) $("#lmsg").textContent = "Email o contraseña incorrectos."; };
+  $("#bcrear").onclick = async () => {
+    const email=$("#lemail").value.trim(), pass=$("#lpass").value;
+    if(!email || pass.length<6){ $("#lmsg").textContent="Escribí tu email y una contraseña de al menos 6 caracteres, y tocá de nuevo."; return; }
+    const { error } = await sb.auth.signUp({ email, password: pass, options:{ emailRedirectTo: location.origin + location.pathname } });
+    $("#lmsg").textContent = error ? error.message : "Listo. Revisá tu mail y confirmá la cuenta; después entrá con tu email y contraseña.";
+  };
+  $("#bolvido").onclick = async () => {
+    const email=$("#lemail").value.trim(); if(!email){ $("#lmsg").textContent="Escribí tu email arriba y tocá de nuevo."; return; }
+    await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+    $("#lmsg").textContent="Te mandamos un mail para cambiar la contraseña.";
+  };
+}
+function pantallaSinPermiso(){
+  $("#root").innerHTML = `<div class="login"><div class="brand">Eternal Secret</div><div class="card"><p>Tu usuario (<b>${esc(session.user.email)}</b>) todavía no está autorizado para ver los datos del consultorio.</p><p class="muted">Pedí que lo agreguen a la lista de usuarios autorizados.</p><button class="btn" id="bsalir">Salir</button></div></div>`;
+  $("#bsalir").onclick = () => sb.auth.signOut();
+}
+async function pantallaNuevaClave(){
+  $("#root").innerHTML = `<div class="login"><div class="brand">Nueva contraseña</div><div class="card"><form id="fnp" class="grid"><label class="f">Contraseña nueva<input id="np" type="password" minlength="6" required></label><button class="btn pri">Guardar</button></form></div></div>`;
+  $("#fnp").onsubmit = async e => { e.preventDefault(); const { error } = await sb.auth.updateUser({ password: $("#np").value }); if(error) fail(error); else { toast("Contraseña actualizada"); location.hash="#/"; render(); } };
+}
+
+/* ---------- estructura ---------- */
+const NAV = [["#/","Inicio","home"],["#/pacientes","Pacientes","pac"],["#/stock","Stock","stock"],["#/facturacion","Facturación","fact"],["#/ajustes","Catálogos","conf"]];
+function shell(){
+  const nav = (cls) => NAV.map(([h,t,i]) => `<a class="navbtn" data-h="${h}" href="${h}">${ICON[i]}<span>${t}</span>${i==="stock"&&alertasStock?`<span class="dot">${alertasStock}</span>`:""}</a>`).join("");
+  $("#root").innerHTML = `<div class="app">
+    <nav class="side"><div class="brand">Eternal Secret<small>Consultorio</small></div>${nav()}<div class="spacer"></div><button class="btn ghost" id="bout">Salir</button></nav>
+    <main><div class="wrap" id="view"></div></main>
+    <nav class="bottom">${nav()}</nav></div>`;
+  $("#bout").onclick = () => sb.auth.signOut();
+}
+function marcarNav(){
+  const h = location.hash || "#/";
+  document.querySelectorAll(".navbtn").forEach(a => { const d=a.dataset.h; a.classList.toggle("on", d==="#/" ? (h==="#/"||h==="") : h.startsWith(d) || (d==="#/pacientes" && h.startsWith("#/p/"))); });
+}
+async function contarAlertas(){
+  try{ const p = await catalogo("productos", true); alertasStock = p.filter(x=>x.activo && x.alerta).length; }catch(e){ alertasStock=0; }
+}
+async function render(){
+  if(!$("#view")) shell();
+  marcarNav();
+  const h = location.hash || "#/"; const v = $("#view");
+  v.innerHTML = `<p class="muted">Cargando…</p>`;
+  try{
+    let m;
+    if(h==="#/"||h==="") await vInicio(v);
+    else if(h==="#/pacientes") await vPacientes(v);
+    else if((m=h.match(/^#\/p\/([\w-]+)(?:\/(\w+))?/))) await vPaciente(v, m[1], m[2]||"visitas");
+    else if(h==="#/stock") await vStock(v);
+    else if(h==="#/facturacion") await vFacturacion(v);
+    else if(h==="#/ajustes") await vAjustes(v);
+    else v.innerHTML = `<p>No encontrado.</p>`;
+  }catch(e){ console.error(e); v.innerHTML = `<div class="card"><b>No se pudieron cargar los datos.</b><p class="muted">${esc(e.message||e)}</p><button class="btn" onclick="render()">Reintentar</button></div>`; }
+}
+window.addEventListener("hashchange", render);
+
+/* ---------- INICIO ---------- */
+async function vInicio(v){
+  const mes = hoy().slice(0,7), ini = mes+"-01";
+  const [{ data: vm }, prods, { data: rec }] = await Promise.all([
+    sb.from("v_visitas").select("total,area,fecha").gte("fecha", ini),
+    catalogo("productos", true),
+    sb.from("v_visitas").select("id,fecha,paciente,paciente_id,area,motivo,detalle_items,total").order("fecha",{ascending:false}).order("creado",{ascending:false}).limit(8)
+  ]);
+  alertasStock = prods.filter(x=>x.activo && x.alerta).length;
+  const tot = vm.reduce((a,x)=>a+Number(x.total||0),0);
+  const est = vm.filter(x=>x.area==="Estética").reduce((a,x)=>a+Number(x.total||0),0);
+  const fun = vm.filter(x=>x.area==="Funcional").reduce((a,x)=>a+Number(x.total||0),0);
+  const alertas = prods.filter(x=>x.activo && x.alerta).sort((a,b)=>(a.proximo_vencimiento||"9")>(b.proximo_vencimiento||"9")?1:-1).slice(0,6);
+  v.innerHTML = `
+    <h1>Hola, Dra.</h1><p class="sub">${new Date().toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"})}</p>
+    <div class="search card" style="padding:0;border:none;background:none;margin-bottom:16px">${ICON.search}<input id="qhome" placeholder="Buscar paciente por apellido, nombre o DNI" autocomplete="off"></div>
+    <div id="reshome"></div>
+    <div class="grid g3" style="margin-bottom:16px">
+      <div class="card stat"><div class="n">${pesos(tot)}</div><div class="l">Facturado este mes · ${vm.length} visitas</div></div>
+      <div class="card stat"><div class="n">${pesos(est)}</div><div class="l">${areaPill("Estética")} este mes</div></div>
+      <div class="card stat"><div class="n">${pesos(fun)}</div><div class="l">${areaPill("Funcional")} este mes</div></div>
+    </div>
+    <div class="grid g2">
+      <div class="card tight"><div style="padding:14px 16px 4px" class="row"><h2 style="margin:0">Últimas visitas</h2></div>
+        <ul class="list">${rec.map(r=>`<li><a class="item" href="#/p/${r.paciente_id}"><div class="main"><div class="t">${esc(r.paciente)}</div><div class="s">${fechaCorta(r.fecha)} · ${esc(r.detalle_items||r.motivo||"")}</div></div><div class="r">${areaPill(r.area)}<div class="muted">${pesos(r.total)}</div></div></a></li>`).join("")}</ul></div>
+      <div class="card tight"><div style="padding:14px 16px 4px" class="row"><h2 style="margin:0">Stock que requiere atención</h2><a class="btn ghost right" href="#/stock">Ver todo</a></div>
+        ${alertas.length?`<ul class="list">${alertas.map(p=>`<li><div class="item"><div class="main"><div class="t">${esc(p.nombre)}</div><div class="s">${esc(p.linea)} · stock ${num(p.stock_actual)} · vence ${fecha(p.proximo_vencimiento)}</div></div><span class="pill ${alertaClase(p.alerta)}">${esc(p.alerta)}</span></div></li>`).join("")}</ul>`:`<div class="empty">Nada pendiente. Cargá los productos en Stock para empezar a ver alertas.</div>`}</div>
+    </div>`;
+  buscadorPacientes($("#qhome"), $("#reshome"));
+}
+function buscadorPacientes(input, out){
+  let t;
+  input.oninput = () => { clearTimeout(t); t = setTimeout(async () => {
+    const q = input.value.trim(); if(q.length<2){ out.innerHTML=""; return; }
+    const { data } = await sb.from("v_pacientes").select("id,nombre,dni,area,ultima_visita").or(`nombre.ilike.%${q.replace(/[%,()]/g,"")}%,dni.ilike.%${q.replace(/[%,()]/g,"")}%`).order("nombre").limit(12);
+    out.innerHTML = `<div class="card tight" style="margin-bottom:16px">${data.length?`<ul class="list">${data.map(p=>`<li><a class="item" href="#/p/${p.id}"><div class="main"><div class="t">${esc(p.nombre)}</div><div class="s">${p.dni?"DNI "+esc(p.dni)+" · ":""}última visita ${fechaCorta(p.ultima_visita)}</div></div>${areaPill(p.area)}</a></li>`).join("")}</ul>`:`<div class="empty">No hay pacientes con ese nombre. <button class="btn ghost" id="bnuevoq">Crear "${esc(q)}"</button></div>`}</div>`;
+    const b=$("#bnuevoq",out); if(b) b.onclick=()=>modalPaciente({nombre:q});
+  },250); };
+}
+
+/* ---------- PACIENTES ---------- */
+async function vPacientes(v){
+  const { data } = await sb.from("v_pacientes").select("id,nombre,dni,area,obra_social,ultima_visita,cantidad_visitas").order("nombre");
+  v.innerHTML = `<div class="row"><h1>Pacientes</h1><button class="btn pri right" id="bnp">+ Nuevo paciente</button></div>
+    <p class="sub">${data.length} pacientes</p>
+    <div class="row" style="margin-bottom:12px"><div class="search" style="flex:1;min-width:220px">${ICON.search}<input id="qp" placeholder="Buscar por apellido, nombre o DNI"></div>
+      <select id="fa" style="width:auto"><option value="">Todas las áreas</option><option>Estética</option><option>Funcional</option><option>Funcional y Estética</option></select>
+      <select id="fo" style="width:auto"><option value="nombre">A–Z</option><option value="ultima">Visita más reciente</option></select></div>
+    <div class="card tight"><ul class="list" id="lp"></ul></div>`;
+  const pinta = () => {
+    const q = $("#qp").value.trim().toLowerCase(), a=$("#fa").value, o=$("#fo").value;
+    let L = data.filter(p => (!q || p.nombre.toLowerCase().includes(q) || (p.dni||"").includes(q)) && (!a || p.area===a));
+    if(o==="ultima") L = [...L].sort((x,y)=>(y.ultima_visita||"")>(x.ultima_visita||"")?1:-1);
+    $("#lp").innerHTML = L.slice(0,300).map(p=>`<li><a class="item" href="#/p/${p.id}"><div class="main"><div class="t">${esc(p.nombre)}</div><div class="s">${p.dni?"DNI "+esc(p.dni):"<span style='color:var(--warn)'>Sin DNI</span>"}${p.obra_social?" · "+esc(p.obra_social):""} · ${p.cantidad_visitas} visitas · última ${fechaCorta(p.ultima_visita)}</div></div>${areaPill(p.area)}</a></li>`).join("") || `<li><div class="empty">Sin resultados.</div></li>`;
+  };
+  ["qp","fa","fo"].forEach(id => $("#"+id).oninput = pinta); pinta();
+  $("#bnp").onclick = () => modalPaciente({});
+}
+function modalPaciente(p){
+  const nuevo = !p.id;
+  abrirModal(nuevo?"Nuevo paciente":"Editar datos", `
+    <form id="fp" class="fields">
+      <label class="f wide">Apellido y nombre<input name="nombre" required value="${esc(p.nombre)}"></label>
+      <label class="f">DNI<input name="dni" inputmode="numeric" value="${esc(p.dni)}"></label>
+      <label class="f">Sexo<select name="sexo"><option value=""></option>${["Femenino","Masculino"].map(s=>`<option ${p.sexo===s?"selected":""}>${s}</option>`).join("")}</select></label>
+      <label class="f">Fecha de nacimiento<input name="fecha_nacimiento" type="date" value="${esc(p.fecha_nacimiento)}"></label>
+      <label class="f">Obra social<input name="obra_social" list="osl" value="${esc(p.obra_social)}"><datalist id="osl">${["Particular","OSDE","Swiss Medical","Galeno","Medifé","Omint","Sancor Salud","IOMA","PAMI","OSECAC"].map(o=>`<option>${o}</option>`).join("")}</datalist></label>
+      <label class="f">N° de afiliado<input name="nro_afiliado" value="${esc(p.nro_afiliado)}"></label>
+      <label class="f">Teléfono<input name="telefono" type="tel" value="${esc(p.telefono)}"></label>
+      <label class="f">Email<input name="email" type="email" value="${esc(p.email)}"></label>
+      <label class="f">Área<select name="area"><option value=""></option>${["Estética","Funcional","Funcional y Estética"].map(s=>`<option ${p.area===s?"selected":""}>${s}</option>`).join("")}</select></label>
+      <label class="f wide">Antecedentes médicos<textarea name="antecedentes">${esc(p.antecedentes)}</textarea></label>
+      <label class="f wide">Alergias / medicación habitual<textarea name="alergias_medicacion">${esc(p.alergias_medicacion)}</textarea></label>
+      <label class="f wide">Observaciones<textarea name="observaciones">${esc(p.observaciones)}</textarea></label>
+      <div class="wide row"><button class="btn pri" type="submit">${nuevo?"Crear paciente":"Guardar cambios"}</button></div>
+    </form>`);
+  $("#fp").onsubmit = async e => { e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target)); for(const k in d) if(d[k]==="") d[k]=null;
+    const r = nuevo ? await sb.from("pacientes").insert(d).select().single() : await sb.from("pacientes").update(d).eq("id",p.id).select().single();
+    if(r.error) return fail(r.error.code==="23505"?"Ya existe un paciente con ese DNI":r.error);
+    cerrarModal(); toast(nuevo?"Paciente creado":"Datos guardados");
+    if(nuevo) location.hash = "#/p/"+r.data.id; else render();
+  };
+}
+
+async function vPaciente(v, id, tab){
+  const { data: p, error } = await sb.from("v_pacientes").select("*").eq("id", id).single();
+  if(error) throw error;
+  const datos = [["DNI",p.dni],["Edad",p.edad!=null?p.edad+" años":null],["Sexo",p.sexo],["Nacimiento",p.fecha_nacimiento?fecha(p.fecha_nacimiento):null],["Obra social",[p.obra_social,p.nro_afiliado].filter(Boolean).join(" · ")],["Teléfono",p.telefono],["Email",p.email]];
+  v.innerHTML = `
+    <a href="#/pacientes" class="btn ghost" style="padding-left:0">← Pacientes</a>
+    <div class="row"><h1>${esc(p.nombre)}</h1>${areaPill(p.area)}<button class="btn right" id="bedit">Editar datos</button></div>
+    <p class="sub">${p.cantidad_visitas} visitas · última ${fechaCorta(p.ultima_visita)}${p.ultimo_laboratorio?" · último laboratorio "+fechaCorta(p.ultimo_laboratorio):""}</p>
+    <div class="grid g2">
+      <div class="card"><h3 style="margin-top:0">Datos</h3><table>${datos.map(([k,x])=>`<tr><th style="width:40%">${k}</th><td>${x?esc(x):`<span class="muted">—</span>`}</td></tr>`).join("")}</table>${p.nombres_anteriores?`<p class="muted" style="font-size:13px;margin:10px 0 0">En la facturación figuraba como: ${esc(p.nombres_anteriores)}</p>`:""}</div>
+      <div class="card"><h3 style="margin-top:0">Historia clínica</h3>
+        <p><b>Antecedentes</b><br>${p.antecedentes?esc(p.antecedentes).replace(/\n/g,"<br>"):'<span class="muted">Sin cargar</span>'}</p>
+        <p><b>Alergias / medicación</b><br>${p.alergias_medicacion?esc(p.alergias_medicacion):'<span class="muted">Sin cargar</span>'}</p>
+        ${p.observaciones?`<p><b>Observaciones</b><br>${esc(p.observaciones)}</p>`:""}</div>
+    </div>
+    <div class="tabs">${[["visitas","Visitas"],["labs","Laboratorios"],["evo","Evolución"]].map(([k,t])=>`<button class="tab ${tab===k?"on":""}" data-t="${k}">${t}</button>`).join("")}</div>
+    <div id="tabc"></div>`;
+  $("#bedit").onclick = () => modalPaciente(p);
+  document.querySelectorAll(".tab").forEach(b => b.onclick = () => { location.hash = `#/p/${id}/${b.dataset.t}`; });
+  const c = $("#tabc");
+  if(tab==="visitas") await tabVisitas(c, p);
+  if(tab==="labs") await tabLabs(c, p);
+  if(tab==="evo") await tabEvolucion(c, p);
+}
+async function tabVisitas(c, p){
+  const { data } = await sb.from("v_visitas").select("*").eq("paciente_id", p.id).order("fecha",{ascending:false}).order("creado",{ascending:false});
+  const total = data.reduce((a,x)=>a+Number(x.total||0),0);
+  c.innerHTML = `<div class="row" style="margin-bottom:10px"><span class="muted">Total facturado: <b style="color:var(--ink)">${pesos(total)}</b></span><button class="btn pri right" id="bnv">+ Nueva visita</button></div>
+    <div class="card tight">${data.length?`<ul class="list">${data.map(x=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left;cursor:pointer" data-v="${x.id}"><div class="main"><div class="t">${fecha(x.fecha)} ${areaPill(x.area)}</div><div class="s">${esc(x.detalle_items||x.motivo||"")}${x.observaciones?" · "+esc(x.observaciones):""}</div></div><div class="r">${pesos(x.total)}</div></button></li>`).join("")}</ul>`:`<div class="empty">Sin visitas.</div>`}</div>`;
+  $("#bnv").onclick = () => modalVisita(p);
+  c.querySelectorAll("[data-v]").forEach(b => b.onclick = () => modalVisita(p, data.find(x=>x.id===b.dataset.v)));
+}
+async function modalVisita(p, visita=null){
+  const [trats, prods] = await Promise.all([catalogo("tratamientos"), catalogo("productos")]);
+  let items = [];
+  if(visita){ const { data } = await sb.from("visita_items").select("*").eq("visita_id", visita.id); items = data; }
+  const fila = (it={}) => `<div class="itemrow">
+      <label class="f">Tipo<select class="it-tipo">${["Tratamiento","Producto","Medicamento"].map(t=>`<option ${it.tipo===t?"selected":""}>${t}</option>`).join("")}</select></label>
+      <label class="f">Qué<select class="it-ref"></select><input class="it-desc" placeholder="Descripción libre (opcional)" value="${esc(it.descripcion)}" style="margin-top:6px"></label>
+      <label class="f">Cant.<input class="it-cant" type="number" min="0" step="any" value="${it.cantidad??1}"></label>
+      <label class="f">Monto $<input class="it-monto" type="number" min="0" step="any" inputmode="decimal" value="${it.monto??""}"></label>
+      <button type="button" class="iconbtn x" title="Quitar">×</button></div>`;
+  abrirModal(visita?"Visita del "+fecha(visita.fecha):"Nueva visita · "+p.nombre, `
+    <form id="fv" class="grid">
+      <div class="fields">
+        <label class="f">Fecha<input name="fecha" type="date" required value="${visita?.fecha||hoy()}"></label>
+        <label class="f">Área<select name="area">${["Estética","Funcional","Funcional y Estética"].map(s=>`<option ${(visita?.area||(p.area==="Funcional"?"Funcional":"Estética"))===s?"selected":""}>${s}</option>`).join("")}</select></label>
+        <label class="f wide">Motivo / resumen<input name="motivo" value="${esc(visita?.motivo)}"></label>
+      </div>
+      ${visita?.total_historico?`<p class="muted" style="margin:0">Registro de la facturación anterior: ${esc(visita.motivo||"")} · ${pesos(visita.total_historico)}</p>`:""}
+      <div><h3>Tratamientos, productos y medicamentos</h3><div id="its"></div><button type="button" class="btn ghost" id="badd">+ Agregar ítem</button></div>
+      <label class="f">Observaciones<textarea name="observaciones">${esc(visita?.observaciones)}</textarea></label>
+      <div class="row"><b>Total: <span id="vtot">$ 0</span></b><span class="right"></span>${visita?`<button type="button" class="btn danger" id="bdelv">Eliminar visita</button>`:""}<button class="btn pri" type="submit">Guardar visita</button></div>
+    </form>`);
+  const box = $("#its");
+  const opciones = (tipo) => tipo==="Tratamiento"
+    ? `<option value="">— elegir tratamiento —</option>`+trats.filter(t=>t.activo).map(t=>`<option value="${t.id}" data-precio="${t.precio??""}">${esc(t.nombre)}${t.area?" ("+t.area+")":""}</option>`).join("")
+    : `<option value="">— elegir producto —</option>`+["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(x=>x.linea===l&&x.activo).map(x=>`<option value="${x.id}" data-precio="${x.precio??""}">${esc(x.nombre)} · stock ${num(x.stock_actual)}</option>`).join("")+`</optgroup>`).join("");
+  const cablear = (row, it={}) => {
+    const tipo=$(".it-tipo",row), ref=$(".it-ref",row), monto=$(".it-monto",row), cant=$(".it-cant",row);
+    const llenar = () => { ref.innerHTML = opciones(tipo.value); };
+    llenar(); ref.value = it.tratamiento_id || it.producto_id || "";
+    tipo.onchange = () => { llenar(); total(); };
+    ref.onchange = () => { const pr = ref.selectedOptions[0]?.dataset.precio; if(pr && !monto.value) monto.value = Number(pr) * (Number(cant.value)||1); total(); };
+    monto.oninput = cant.oninput = total;
+    $(".x",row).onclick = () => { row.remove(); total(); };
+  };
+  const agregar = (it) => { box.insertAdjacentHTML("beforeend", fila(it)); cablear(box.lastElementChild, it); total(); };
+  function total(){ let s = Number(visita?.total_historico||0); box.querySelectorAll(".it-monto").forEach(m=>s+=Number(m.value||0)); $("#vtot").textContent = pesos(s); }
+  (items.length?items:(visita?[]:[{}])).forEach(agregar);
+  $("#badd").onclick = () => agregar({});
+  if(visita) $("#bdelv").onclick = async () => { if(!(await confirmar("¿Eliminar esta visita y sus ítems?"))) return; const { error } = await sb.from("visitas").delete().eq("id",visita.id); if(error) return fail(error); cerrarModal(); toast("Visita eliminada"); cache.productos=null; render(); };
+  $("#fv").onsubmit = async e => { e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target)); for(const k in d) if(d[k]==="") d[k]=null;
+    const filas = [...box.querySelectorAll(".itemrow")].map(r => {
+      const tipo=$(".it-tipo",r).value, ref=$(".it-ref",r).value||null;
+      return { tipo, tratamiento_id: tipo==="Tratamiento"?ref:null, producto_id: tipo!=="Tratamiento"?ref:null,
+        descripcion: $(".it-desc",r).value.trim() || null, cantidad: Number($(".it-cant",r).value||1), monto: Number($(".it-monto",r).value||0) };
+    }).filter(x => x.tratamiento_id || x.producto_id || x.descripcion || x.monto);
+    let vid = visita?.id;
+    if(visita){ const r = await sb.from("visitas").update(d).eq("id",vid); if(r.error) return fail(r.error);
+      const r2 = await sb.from("visita_items").delete().eq("visita_id",vid); if(r2.error) return fail(r2.error); }
+    else { const r = await sb.from("visitas").insert({ ...d, paciente_id: p.id }).select().single(); if(r.error) return fail(r.error); vid = r.data.id; }
+    if(filas.length){ const r = await sb.from("visita_items").insert(filas.map(x=>({...x, visita_id: vid}))); if(r.error) return fail(r.error); }
+    cerrarModal(); toast("Visita guardada"); cache.productos=null; render();
+  };
+}
+
+/* ---------- LABORATORIOS ---------- */
+async function tabLabs(c, p){
+  const { data } = await sb.from("v_resultados").select("*").eq("paciente_id", p.id).order("fecha",{ascending:false}).order("orden");
+  const fechas = [...new Set(data.map(r=>r.fecha))];
+  c.innerHTML = `<div class="row" style="margin-bottom:10px"><span class="muted">${fechas.length} análisis cargados</span><button class="btn pri right" id="bnl">+ Cargar laboratorio</button></div>
+    ${fechas.length?fechas.map(f=>{ const rs=data.filter(r=>r.fecha===f); return `<div class="card tight" style="margin-bottom:12px"><div class="row" style="padding:12px 16px"><h2 style="margin:0">${fecha(f)}</h2><span class="muted">${rs.length} valores</span><button class="btn ghost right" data-f="${f}">Editar</button></div><div class="tablewrap"><table><thead><tr><th>Determinación</th><th class="num">Valor</th><th>Unidad</th><th>Rango</th><th>Estado</th></tr></thead><tbody>${rs.map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${num(r.valor)}</b></td><td class="muted">${esc(r.unidad)}</td><td class="muted">${rango(r)}</td><td><span class="pill ${estadoClase(r.estado)}">${esc(r.estado)}</span></td></tr>`).join("")}</tbody></table></div></div>`; }).join(""):`<div class="card empty">Todavía no hay laboratorios cargados para ${esc(p.nombre)}.</div>`}`;
+  $("#bnl").onclick = () => modalLab(p);
+  c.querySelectorAll("[data-f]").forEach(b => b.onclick = () => modalLab(p, b.dataset.f, data.filter(r=>r.fecha===b.dataset.f)));
+}
+function rango(r){
+  const ref = (r.rmin!=null||r.rmax!=null) ? `${r.rmin??"…"}–${r.rmax??"…"}` : "";
+  const opt = (r.omin!=null||r.omax!=null) ? `óptimo ${r.omin??"…"}–${r.omax??"…"}` : "";
+  return [ref,opt].filter(Boolean).join(" · ") || "sin rango";
+}
+async function modalLab(p, fechaLab=null, previos=[]){
+  const dets = await catalogo("determinaciones");
+  const prev = Object.fromEntries(previos.map(r=>[r.determinacion_id, r]));
+  const grupos = [...new Set(dets.map(d=>d.grupo))];
+  abrirModal(fechaLab?"Laboratorio del "+fecha(fechaLab):"Cargar laboratorio · "+p.nombre, `
+    <form id="fl" class="grid">
+      <div class="fields"><label class="f">Fecha del análisis<input name="fecha" type="date" required value="${fechaLab||hoy()}"></label>
+      <label class="f">Buscar determinación<input id="qdet" placeholder="ej. ferritina, TSH…"></label></div>
+      <p class="muted" style="margin:0">Completá solo los valores que vinieron en el análisis. Los vacíos se ignoran.</p>
+      <div id="dets">${grupos.map(g=>`<div class="labgroup" data-g="${esc(g)}"><h3>${esc(g)}</h3>${dets.filter(d=>d.grupo===g).map(d=>`<div class="labrow" data-n="${esc(d.nombre.toLowerCase())}"><span>${esc(d.nombre)} <span class="rng">${esc(d.unidad||"")}</span></span><input type="number" step="any" inputmode="decimal" data-d="${d.id}" value="${prev[d.id]?.valor??""}" placeholder="valor"><span class="rng">${d.ref_min!=null||d.ref_max!=null?`${d.ref_min??"…"}–${d.ref_max??"…"}`:""}</span></div>`).join("")}</div>`).join("")}</div>
+      <div class="row">${fechaLab?`<button type="button" class="btn danger" id="bdell">Eliminar este análisis</button>`:""}<button class="btn pri right" type="submit">Guardar laboratorio</button></div>
+    </form>`);
+  $("#qdet").oninput = e => { const q=e.target.value.toLowerCase(); document.querySelectorAll(".labrow").forEach(r=>r.hidden = q && !r.dataset.n.includes(q)); document.querySelectorAll(".labgroup").forEach(g=>g.hidden = ![...g.querySelectorAll(".labrow")].some(r=>!r.hidden)); };
+  if(fechaLab) $("#bdell").onclick = async () => { if(!(await confirmar("¿Eliminar todos los valores de este análisis?"))) return; const { error } = await sb.from("resultados").delete().eq("paciente_id",p.id).eq("fecha",fechaLab); if(error) return fail(error); cerrarModal(); toast("Análisis eliminado"); render(); };
+  $("#fl").onsubmit = async e => { e.preventDefault();
+    const f = new FormData(e.target).get("fecha");
+    const filas = [...document.querySelectorAll("#dets input[data-d]")].filter(i=>i.value!=="").map(i=>({ paciente_id:p.id, determinacion_id:i.dataset.d, fecha:f, valor:Number(i.value) }));
+    if(!filas.length) return toast("No cargaste ningún valor.");
+    if(fechaLab){ const r = await sb.from("resultados").delete().eq("paciente_id",p.id).eq("fecha",fechaLab); if(r.error) return fail(r.error); }
+    const { error } = await sb.from("resultados").insert(filas); if(error) return fail(error);
+    cerrarModal(); toast(`${filas.length} valores guardados`); location.hash = `#/p/${p.id}/labs`; render();
+  };
+}
+async function tabEvolucion(c, p){
+  const { data } = await sb.from("v_resultados").select("*").eq("paciente_id", p.id).order("fecha");
+  if(!data.length){ c.innerHTML = `<div class="card empty">Cuando haya laboratorios cargados, acá vas a ver cómo evolucionó cada valor.</div>`; return; }
+  const porDet = {}; data.forEach(r => (porDet[r.determinacion] ??= []).push(r));
+  const orden = Object.values(porDet).sort((a,b)=>a[0].orden-b[0].orden);
+  c.innerHTML = `<p class="muted">Cada gráfico muestra los valores de una determinación en el tiempo. La franja verde es el rango óptimo; las líneas punteadas, el rango de referencia.</p><div class="evo">${orden.map(rs=>`<div class="card"><div class="row" style="margin-bottom:6px"><b>${esc(rs[0].determinacion)}</b><span class="pill ${estadoClase(rs.at(-1).estado)} right">${esc(rs.at(-1).estado)}</span></div><div class="muted" style="font-size:13px;margin-bottom:6px">Último: <b style="color:var(--ink)">${num(rs.at(-1).valor)}</b> ${esc(rs[0].unidad||"")} · ${fecha(rs.at(-1).fecha)}</div>${grafico(rs)}</div>`).join("")}</div>`;
+}
+function grafico(rs){
+  const W=260,H=120,L=34,R=10,T=10,B=22;
+  const r0=rs.at(-1); const vals=rs.map(r=>Number(r.valor));
+  const extra=[r0.rmin,r0.rmax,r0.omin,r0.omax].filter(x=>x!=null).map(Number);
+  let lo=Math.min(...vals,...extra), hi=Math.max(...vals,...extra); if(lo===hi){lo-=1;hi+=1;} const pad=(hi-lo)*.12; lo-=pad; hi+=pad;
+  const y = v => T + (H-T-B) * (1-(v-lo)/(hi-lo));
+  const n=rs.length, x = i => n===1 ? (L+(W-L-R)/2) : L + (W-L-R)*i/(n-1);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolución de ${esc(r0.determinacion)}">`;
+  if(r0.omin!=null||r0.omax!=null){ const a=y(r0.omax??hi), b=y(r0.omin??lo); s+=`<rect x="${L}" y="${a}" width="${W-L-R}" height="${Math.max(0,b-a)}" fill="var(--ok-soft)"/>`; }
+  [r0.rmin,r0.rmax].forEach(v=>{ if(v!=null) s+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--ink2)" stroke-dasharray="3 3" stroke-width="1"/><text x="${L-4}" y="${y(v)+4}" font-size="10" text-anchor="end" fill="var(--ink2)">${num(v)}</text>`; });
+  if(n>1) s+=`<polyline fill="none" stroke="var(--accent)" stroke-width="2" points="${rs.map((r,i)=>x(i)+","+y(r.valor)).join(" ")}"/>`;
+  rs.forEach((r,i)=>{ s+=`<circle cx="${x(i)}" cy="${y(r.valor)}" r="${i===n-1?4.5:3}" fill="${i===n-1?"var(--accent)":"var(--surface)"}" stroke="var(--accent)" stroke-width="2"/>`; });
+  s+=`<text x="${x(0)}" y="${H-6}" font-size="10" fill="var(--ink2)" text-anchor="${n===1?"middle":"start"}">${fechaCorta(rs[0].fecha)}</text>`;
+  if(n>1) s+=`<text x="${x(n-1)}" y="${H-6}" font-size="10" fill="var(--ink2)" text-anchor="end">${fechaCorta(r0.fecha)}</text>`;
+  return s+`</svg>`;
+}
+
+/* ---------- STOCK ---------- */
+async function vStock(v){
+  const prods = await catalogo("productos", true);
+  alertasStock = prods.filter(x=>x.activo && x.alerta).length; marcarNav();
+  v.innerHTML = `<div class="row"><h1>Stock</h1><button class="btn right" id="bnprod">+ Producto</button><button class="btn pri" id="bcomp">+ Cargar compra</button></div>
+    <p class="sub">El stock se calcula solo: stock inicial + compras − lo entregado en visitas.</p>
+    <div class="row" style="margin-bottom:12px"><div class="search" style="flex:1;min-width:200px">${ICON.search}<input id="qs" placeholder="Buscar producto"></div>
+      <select id="fl" style="width:auto"><option value="">Funcional y Estética</option><option>Funcional</option><option>Estética</option></select>
+      <select id="fal" style="width:auto"><option value="">Todos</option><option value="1" ${alertasStock?"selected":""}>Solo con alerta</option></select></div>
+    <div class="card tight"><div class="tablewrap"><table><thead><tr><th>Producto</th><th>Línea</th><th class="num">Stock</th><th class="num">Mín.</th><th>Próx. vencimiento</th><th>Estado</th><th class="num">Precio</th><th></th></tr></thead><tbody id="ts"></tbody></table></div></div>
+    <h2 style="margin-top:24px">Últimas compras</h2><div id="ucomp"></div>`;
+  const pinta = () => { const q=$("#qs").value.toLowerCase(), l=$("#fl").value, a=$("#fal").value;
+    const L = prods.filter(p=>p.activo && (!q||p.nombre.toLowerCase().includes(q)) && (!l||p.linea===l) && (!a||p.alerta));
+    $("#ts").innerHTML = L.map(p=>`<tr><td><b>${esc(p.nombre)}</b></td><td>${areaPill(p.linea)}</td><td class="num">${num(p.stock_actual)}</td><td class="num muted">${num(p.stock_minimo)}</td><td>${fecha(p.proximo_vencimiento)}</td><td><span class="pill ${alertaClase(p.alerta)}">${esc(p.alerta||"OK")}</span></td><td class="num">${pesos(p.precio)}</td><td><button class="btn ghost" data-e="${p.id}">Editar</button></td></tr>`).join("") || `<tr><td colspan="8"><div class="empty">${prods.length?"Sin resultados.":"Todavía no hay productos. Tocá “+ Producto” para cargar el primero."}</div></td></tr>`;
+    $("#ts").querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>modalProducto(prods.find(x=>x.id===b.dataset.e)));
+  };
+  ["qs","fl","fal"].forEach(id=>$("#"+id).oninput=pinta); pinta();
+  $("#bnprod").onclick = () => modalProducto({});
+  $("#bcomp").onclick = () => modalCompra();
+  const { data: cs } = await sb.from("compras").select("*, productos(nombre,linea)").order("fecha",{ascending:false}).order("creado",{ascending:false}).limit(15);
+  $("#ucomp").innerHTML = `<div class="card tight">${cs.length?`<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Producto</th><th class="num">Cant.</th><th class="num">Costo unit.</th><th>Vence</th><th>Lote</th><th>Proveedor</th><th></th></tr></thead><tbody>${cs.map(c=>`<tr><td>${fecha(c.fecha)}</td><td>${esc(c.productos?.nombre)}</td><td class="num">${num(c.cantidad)}</td><td class="num">${pesos(c.costo_unitario)}</td><td>${fecha(c.vencimiento)}</td><td>${esc(c.lote||"")}</td><td>${esc(c.proveedor||"")}</td><td>${c.lote_terminado?`<span class="pill s-none">Terminado</span>`:`<button class="btn ghost" data-t="${c.id}">Marcar terminado</button>`}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">Todavía no hay compras cargadas.</div>`}</div>`;
+  $("#ucomp").querySelectorAll("[data-t]").forEach(b=>b.onclick=async()=>{ const { error } = await sb.from("compras").update({lote_terminado:true}).eq("id",b.dataset.t); if(error) return fail(error); toast("Lote marcado como terminado"); cache.productos=null; render(); });
+}
+function modalProducto(p){
+  const nuevo=!p.id;
+  abrirModal(nuevo?"Nuevo producto":"Editar producto", `<form id="fpr" class="fields">
+    <label class="f wide">Nombre<input name="nombre" required value="${esc(p.nombre)}"></label>
+    <label class="f">Línea<select name="linea">${["Funcional","Estética"].map(l=>`<option ${p.linea===l?"selected":""}>${l}</option>`).join("")}</select></label>
+    <label class="f">Costo $<input name="costo" type="number" step="any" value="${p.costo??""}"></label>
+    <label class="f">Precio de venta $<input name="precio" type="number" step="any" value="${p.precio??""}"></label>
+    <label class="f">Stock inicial<input name="stock_inicial" type="number" step="any" value="${p.stock_inicial??0}"></label>
+    <label class="f">Stock mínimo (alerta)<input name="stock_minimo" type="number" step="any" value="${p.stock_minimo??2}"></label>
+    <label class="f">Vencimiento (si no hay compras cargadas)<input name="vencimiento_inicial" type="date" value="${esc(p.vencimiento_inicial)}"></label>
+    <div class="wide row">${nuevo?"":`<button type="button" class="btn danger" id="bbaja">Dar de baja</button>`}<button class="btn pri right">Guardar</button></div></form>`);
+  if(!nuevo) $("#bbaja").onclick = async () => { const { error } = await sb.from("productos").update({activo:false}).eq("id",p.id); if(error) return fail(error); cerrarModal(); toast("Producto dado de baja"); cache.productos=null; render(); };
+  $("#fpr").onsubmit = async e => { e.preventDefault(); const d=Object.fromEntries(new FormData(e.target)); for(const k in d) if(d[k]==="") d[k]=null;
+    const r = nuevo ? await sb.from("productos").insert(d) : await sb.from("productos").update(d).eq("id",p.id);
+    if(r.error) return fail(r.error.code==="23505"?"Ya existe un producto con ese nombre en esa línea":r.error); cerrarModal(); toast("Producto guardado"); cache.productos=null; render(); };
+}
+async function modalCompra(){
+  const prods = await catalogo("productos");
+  const { data: provs } = await sb.from("compras").select("proveedor").not("proveedor","is",null);
+  const proveedores = [...new Set((provs||[]).map(x=>x.proveedor))].sort();
+  abrirModal("Cargar compra", `<form id="fc" class="fields">
+    <label class="f wide">Producto<select name="producto_id" required><option value="">— elegir —</option>${["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(x=>x.linea===l&&x.activo).map(x=>`<option value="${x.id}" data-c="${x.costo??""}">${esc(x.nombre)}</option>`).join("")+`</optgroup>`).join("")}</select></label>
+    <label class="f">Fecha de compra<input name="fecha" type="date" required value="${hoy()}"></label>
+    <label class="f">Cantidad<input name="cantidad" type="number" min="1" step="any" required></label>
+    <label class="f">Costo unitario $<input name="costo_unitario" type="number" step="any"></label>
+    <label class="f">Vencimiento<input name="vencimiento" type="date"></label>
+    <label class="f">Lote<input name="lote"></label>
+    <label class="f">Proveedor<input name="proveedor" list="provl"><datalist id="provl">${proveedores.map(p=>`<option>${esc(p)}</option>`).join("")}</datalist></label>
+    <label class="f">N° de factura<input name="nro_factura"></label>
+    <label class="f wide" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="actualizar_costo" checked style="width:auto;min-height:0"> Actualizar el costo del producto con este valor</label>
+    <div class="wide row"><button class="btn pri right">Guardar compra</button></div></form>`);
+  $("#fc [name=producto_id]").onchange = e => { const c=e.target.selectedOptions[0]?.dataset.c; if(c && !$("#fc [name=costo_unitario]").value) $("#fc [name=costo_unitario]").value=c; };
+  $("#fc").onsubmit = async e => { e.preventDefault(); const d=Object.fromEntries(new FormData(e.target)); const upd = !!d.actualizar_costo; delete d.actualizar_costo; for(const k in d) if(d[k]==="") d[k]=null;
+    const { error } = await sb.from("compras").insert(d); if(error) return fail(error);
+    if(upd && d.costo_unitario) await sb.from("productos").update({costo:d.costo_unitario}).eq("id",d.producto_id);
+    cerrarModal(); toast("Compra cargada: el stock ya se actualizó"); cache.productos=null; render(); };
+}
+
+/* ---------- FACTURACIÓN ---------- */
+async function vFacturacion(v){
+  let all=[], from=0; while(true){ const { data, error } = await sb.from("v_visitas").select("fecha,area,total").range(from, from+999); if(error) throw error; all=all.concat(data); if(data.length<1000) break; from+=1000; }
+  const meses = {}; all.forEach(x=>{ const m=x.fecha.slice(0,7); const o=(meses[m]??={tot:0,est:0,fun:0,amb:0,n:0}); const t=Number(x.total||0); o.tot+=t; o.n++; if(x.area==="Estética") o.est+=t; else if(x.area==="Funcional") o.fun+=t; else o.amb+=t; });
+  const keys = Object.keys(meses).sort().reverse(); const max = Math.max(...keys.map(k=>meses[k].tot),1);
+  v.innerHTML = `<h1>Facturación</h1><p class="sub">Total por mes y por área, desde las visitas cargadas (incluye la facturación histórica de Notion).</p>
+    <div class="card tight"><div class="tablewrap"><table><thead><tr><th>Mes</th><th class="num">Visitas</th><th class="num">Estética</th><th class="num">Funcional</th><th class="num">Ambas / otros</th><th class="num">Total</th><th style="width:22%"></th></tr></thead><tbody>${keys.map(k=>{const o=meses[k];const [y,m]=k.split("-");return `<tr><td><b>${MESES[+m-1]} ${y}</b></td><td class="num">${o.n}</td><td class="num">${pesos(o.est)}</td><td class="num">${pesos(o.fun)}</td><td class="num muted">${pesos(o.amb)}</td><td class="num"><b>${pesos(o.tot)}</b></td><td><div class="bar"><span style="width:${(o.tot/max*100).toFixed(1)}%"></span></div></td></tr>`}).join("")}</tbody></table></div></div>`;
+}
+
+/* ---------- CATÁLOGOS ---------- */
+async function vAjustes(v){
+  const [trats, dets] = await Promise.all([catalogo("tratamientos",true), catalogo("determinaciones",true)]);
+  v.innerHTML = `<h1>Catálogos</h1><p class="sub">Tratamientos con su precio y rangos de laboratorio. Lo que cargues acá se usa en las visitas y en el estado de cada análisis.</p>
+    <div class="tabs"><button class="tab on" data-c="t">Tratamientos</button><button class="tab" data-c="d">Rangos de laboratorio</button></div><div id="cc"></div>`;
+  const pintaT = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:10px"><button class="btn pri right" id="bnt">+ Tratamiento</button></div><div class="card tight">${trats.length?`<ul class="list">${trats.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left;cursor:pointer" data-t="${t.id}"><div class="main"><div class="t">${esc(t.nombre)}${t.activo?"":" <span class='pill s-none'>inactivo</span>"}</div><div class="s">${esc(t.categoria||"")}</div></div>${areaPill(t.area)}<div class="r">${pesos(t.precio)}</div></button></li>`).join("")}</ul>`:`<div class="empty">Cargá los tratamientos que hace (facial, PRP, sueroterapia…) con su precio. Así al cargar una visita se completan solos.</div>`}</div>`;
+    $("#bnt").onclick=()=>modalTrat({}); $("#cc").querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>modalTrat(trats.find(x=>x.id===b.dataset.t))); };
+  const pintaD = () => { $("#cc").innerHTML = `<p class="muted">Tocá una determinación para cargar el rango de referencia y el óptimo funcional. Si es distinto para hombres, completá también esos campos.</p><div class="card tight"><div class="tablewrap"><table><thead><tr><th>Determinación</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Hombres</th><th></th></tr></thead><tbody>${dets.map(d=>`<tr><td><b>${esc(d.nombre)}</b><div class="muted" style="font-size:12.5px">${esc(d.grupo)}</div></td><td>${esc(d.unidad||"")}</td><td>${d.ref_min!=null||d.ref_max!=null?`${d.ref_min??"…"}–${d.ref_max??"…"}`:'<span class="muted">—</span>'}</td><td>${d.opt_min!=null||d.opt_max!=null?`${d.opt_min??"…"}–${d.opt_max??"…"}`:'<span class="muted">—</span>'}</td><td class="muted">${[d.ref_min_h,d.ref_max_h,d.opt_min_h,d.opt_max_h].some(x=>x!=null)?"sí":""}</td><td><button class="btn ghost" data-d="${d.id}">Editar</button></td></tr>`).join("")}</tbody></table></div></div>`;
+    $("#cc").querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>modalDet(dets.find(x=>x.id===b.dataset.d))); };
+  document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{ document.querySelectorAll("[data-c]").forEach(x=>x.classList.toggle("on",x===b)); b.dataset.c==="t"?pintaT():pintaD(); });
+  pintaT();
+}
+function modalTrat(t){
+  const nuevo=!t.id;
+  abrirModal(nuevo?"Nuevo tratamiento":"Editar tratamiento", `<form id="ft" class="fields">
+    <label class="f wide">Nombre<input name="nombre" required value="${esc(t.nombre)}"></label>
+    <label class="f">Área<select name="area">${["Estética","Funcional"].map(a=>`<option ${t.area===a?"selected":""}>${a}</option>`).join("")}</select></label>
+    <label class="f">Categoría<input name="categoria" list="catl" value="${esc(t.categoria)}"><datalist id="catl">${["Facial","Corporal","Inyectable","Sueroterapia","Consulta","Capilar"].map(c=>`<option>${c}</option>`).join("")}</datalist></label>
+    <label class="f">Precio $<input name="precio" type="number" step="any" value="${t.precio??""}"></label>
+    <label class="f" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="activo" ${t.activo===false?"":"checked"} style="width:auto;min-height:0"> Activo</label>
+    <div class="wide row"><button class="btn pri right">Guardar</button></div></form>`);
+  $("#ft").onsubmit = async e => { e.preventDefault(); const d=Object.fromEntries(new FormData(e.target)); d.activo=!!d.activo; for(const k in d) if(d[k]==="") d[k]=null;
+    const r = nuevo ? await sb.from("tratamientos").insert(d) : await sb.from("tratamientos").update(d).eq("id",t.id); if(r.error) return fail(r.error); cerrarModal(); toast("Tratamiento guardado"); cache.tratamientos=null; render(); };
+}
+function modalDet(d){
+  const campo=(k,l)=>`<label class="f">${l}<input name="${k}" type="number" step="any" value="${d[k]??""}"></label>`;
+  abrirModal(d.nombre, `<form id="fd" class="fields">
+    <label class="f">Unidad<input name="unidad" value="${esc(d.unidad)}"></label><div></div>
+    ${campo("ref_min","Referencia mín.")}${campo("ref_max","Referencia máx.")}${campo("opt_min","Óptimo mín.")}${campo("opt_max","Óptimo máx.")}
+    <h3 class="wide">Solo si es distinto para hombres</h3>
+    ${campo("ref_min_h","Referencia mín. (H)")}${campo("ref_max_h","Referencia máx. (H)")}${campo("opt_min_h","Óptimo mín. (H)")}${campo("opt_max_h","Óptimo máx. (H)")}
+    <label class="f wide">Notas<input name="notas" value="${esc(d.notas)}"></label>
+    <div class="wide row"><button class="btn pri right">Guardar</button></div></form>`);
+  $("#fd").onsubmit = async e => { e.preventDefault(); const x=Object.fromEntries(new FormData(e.target)); for(const k in x) if(x[k]==="") x[k]=null; x.rangos_revisados=true;
+    const { error } = await sb.from("determinaciones").update(x).eq("id",d.id); if(error) return fail(error); cerrarModal(); toast("Rangos guardados"); cache.determinaciones=null; render(); };
+}
+
+/* ---------- modales ---------- */
+function abrirModal(titulo, html){
+  cerrarModal();
+  const bg=document.createElement("div"); bg.className="modal-bg"; bg.id="mbg";
+  bg.innerHTML=`<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(titulo)}"><div class="modal-head"><h2 style="margin:0">${esc(titulo)}</h2><button class="iconbtn" id="mclose" aria-label="Cerrar">×</button></div>${html}</div>`;
+  document.body.appendChild(bg); $("#mclose").onclick=cerrarModal; bg.onclick=e=>{ if(e.target===bg) cerrarModal(); };
+  setTimeout(()=>{ const f=bg.querySelector("input:not([type=checkbox]),select"); if(f && window.innerWidth>820) f.focus(); },50);
+}
+function cerrarModal(){ $("#mbg")?.remove(); }
+function confirmar(msg){ return new Promise(res=>{ const bg=document.createElement("div"); bg.className="modal-bg"; bg.style.zIndex=60;
+  bg.innerHTML=`<div class="modal" style="max-width:420px"><p style="font-weight:600">${esc(msg)}</p><div class="row"><button class="btn right" id="cno">Cancelar</button><button class="btn pri" id="csi">Sí, eliminar</button></div></div>`;
+  document.body.appendChild(bg); $("#cno",bg).onclick=()=>{bg.remove();res(false)}; $("#csi",bg).onclick=()=>{bg.remove();res(true)}; }); }
+
+/* ---------- arranque ---------- */
+let enRecuperacion = false;
+sb.auth.onAuthStateChange(async (ev, s) => {
+  if(ev==="PASSWORD_RECOVERY"){ enRecuperacion=true; session=s; return pantallaNuevaClave(); }
+  if(ev==="INITIAL_SESSION"||ev==="SIGNED_IN"||ev==="SIGNED_OUT"){
+    if(enRecuperacion) return;
+    session = s;
+    if(!session) return pantallaLogin();
+    await verificarAcceso();
+    if(!autorizado) return pantallaSinPermiso();
+    shell(); await contarAlertas(); shell(); render();
+  }
+});
+</script>
+</body>
+</html>
