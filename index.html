@@ -168,7 +168,7 @@ td.num,th.num{text-align:right}
  .pl-datos{display:flex;flex-wrap:wrap;gap:8px 24px;margin:4px 0 10px;font-size:10.5pt}
 .pl-l{display:inline-block;min-width:22mm;border-bottom:1px solid #777;height:1.1em;vertical-align:bottom}
 .pl-largo{min-width:80mm}.pl-medio{min-width:50mm}.pl-fecha{min-width:30mm;color:#777}
-.pl-tab td{padding:5px 6px}.pl-tab th small{text-transform:none;font-weight:400}
+.pl-tab td{padding:5px 6px}.pl-sub td{font-size:8.5pt;color:#444;padding-top:2px;padding-bottom:2px}.pl-tab th small{text-transform:none;font-weight:400}
 .inf-evo{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .inf-ev{border:1px solid #ddd;border-radius:6px;padding:7px 9px;break-inside:avoid}
 .inf-ev-h{display:flex;justify-content:space-between}.inf-ev-h span,.inf-ev-r{color:#666;font-size:8.5pt}
@@ -181,7 +181,7 @@ td.num,th.num{text-align:right}
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31h";
+const APP_VERSION = "2026-10-31i";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -195,6 +195,8 @@ const $ = (s, el=document) => el.querySelector(s);
 const esc = s => (s ?? "").toString().replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const pesos = n => (n==null||isNaN(n)) ? "—" : "$ " + Math.round(Number(n)).toLocaleString("es-AR");
 const num = n => (n==null||n==="") ? "—" : Number(n).toLocaleString("es-AR",{maximumFractionDigits:2});
+const FASES = ["Fase folicular","Mitad de ciclo","Fase lútea","Posmenopáusica","Posmenopáusica sin HRT","Posmenopáusica con HRT"];
+const EDADES = ["21 a 49","50 o más"];
 const rtxt = (a,b) => (a!=null&&b!=null) ? `${num(a)} – ${num(b)}` : a!=null ? `> ${num(a)}` : b!=null ? `< ${num(b)}` : "";
 const hoy = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
 const fecha = s => { if(!s) return "—"; const [y,m,d]=s.slice(0,10).split("-"); return `${d}/${m}/${y}`; };
@@ -518,17 +520,18 @@ function imprimirPlanilla(dets){
   const linea = '<span class="pl-l"></span>';
   const html = `<header class="inf-head"><img src="logo.png" alt=""><div class="inf-dra"><div class="inf-marca">Eternal Secret</div><div><b>${DRA}</b></div><div class="inf-mut">Medicina funcional y estética</div></div>
       <div class="inf-tit"><div class="inf-h">Planilla de laboratorio</div><div class="inf-mut">Para completar a mano</div></div></header>
-    <section class="pl-datos"><div>Paciente: <span class="pl-l pl-largo"></span></div><div>Fecha del análisis: <span class="pl-l pl-fecha">&nbsp;&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/</span></div><div>Laboratorio: <span class="pl-l pl-medio"></span></div></section>
+    <section class="pl-datos"><div>Paciente: <span class="pl-l pl-largo"></span></div><div>Fecha del análisis: <span class="pl-l pl-fecha">&nbsp;&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/</span></div><div>Laboratorio: <span class="pl-l pl-medio"></span></div><div>Fase del ciclo: ${FASES.map(x=>"☐ "+x).join(" &nbsp; ")} &nbsp; ☐ No corresponde</div></section>
     <table class="inf-tab pl-tab"><thead><tr><th>Determinación</th><th>Unidad</th><th>Resultado</th><th>Rango de referencia<br><small>desde – hasta</small></th><th>Rango óptimo<br><small>desde – hasta</small></th></tr></thead>
-    ${grupos.map(g=>`<tbody><tr class="inf-grp"><td colspan="5">${esc(g)}</td></tr>${L.filter(d=>d.grupo===g).map(d=>`<tr><td>${esc(d.nombre)}</td><td>${esc(d.unidad||"")}</td><td>${d.cualitativa?"☐ No reactivo &nbsp; ☐ Reactivo":linea}</td><td>${d.cualitativa?"":linea+" – "+linea}</td><td>${d.cualitativa?"":linea+" – "+linea}</td></tr>`).join("")}</tbody>`).join("")}</table>
+    ${grupos.map(g=>`<tbody><tr class="inf-grp"><td colspan="5">${esc(g)}</td></tr>${L.filter(d=>d.grupo===g).map(d=>`<tr><td>${esc(d.nombre)}</td><td>${esc(d.unidad||"")}</td><td>${d.cualitativa?"☐ No reactivo &nbsp; ☐ Reactivo":linea}</td><td>${d.cualitativa||d.rango_por?"":linea+" – "+linea}</td><td>${d.cualitativa||d.rango_por?"":linea+" – "+linea}</td></tr>${(d.rango_por==="fase"?FASES:d.rango_por==="edad"?EDADES.flatMap(e=>[e+" · mujeres",e+" · hombres"]):[]).map(c=>`<tr class="pl-sub"><td>&nbsp;&nbsp;↳ ${esc(c)}</td><td></td><td></td><td>${linea} – ${linea}</td><td>${linea} – ${linea}</td></tr>`).join("")}`).join("")}</tbody>`).join("")}</table>
     <p class="inf-mut" style="margin-top:8px">Los índices (perfil de oxidación Apo B / Apo A y perfil de inflamación metabólica TG / HDL) no se anotan: la app los calcula sola.</p>
     <footer class="inf-ley">Observaciones: <span class="pl-l pl-largo"></span><div class="inf-firma">${DRA}</div></footer>`;
   imprimirHTML(html, "print-doc", "@page{size:A4;margin:11mm 12mm}");
 }
 function imprimirLaboratorio(p, f, rs){
   const grupos = [...new Set(rs.map(r=>r.grupo))];
-  const html = cabeceraInforme(p, "Informe de laboratorio", "Análisis del " + fecha(f)) +
-    `<table class="inf-tab"><thead><tr><th>Determinación</th><th class="num">Resultado</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Estado</th></tr></thead>${grupos.map(g=>`<tbody><tr class="inf-grp"><td colspan="6">${esc(g)}</td></tr>${rs.filter(r=>r.grupo===g).map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${valorTxt(r)}</b></td><td>${esc(r.unidad||"")}</td><td>${rangoTxt(r.rmin,r.rmax)}</td><td>${rangoTxt(r.omin,r.omax)}</td><td class="inf-est">${punto(r.estado)} ${semaforoTxt(r.estado)}</td></tr>`).join("")}</tbody>`).join("")}</table>` + leyendaInforme();
+  const fase = rs.find(r=>r.fase)?.fase;
+  const html = cabeceraInforme(p, "Informe de laboratorio", "Análisis del " + fecha(f) + (fase ? " · " + fase : "")) +
+    `<table class="inf-tab"><thead><tr><th>Determinación</th><th class="num">Resultado</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Estado</th></tr></thead>${grupos.map(g=>`<tbody><tr class="inf-grp"><td colspan="6">${esc(g)}</td></tr>${rs.filter(r=>r.grupo===g).map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${valorTxt(r)}</b></td><td>${esc(r.unidad||"")}</td><td>${rangoTxt(r.rmin,r.rmax)}${r.rango_categoria?`<div class="inf-mut">${esc(r.rango_categoria)}</div>`:""}</td><td>${rangoTxt(r.omin,r.omax)}</td><td class="inf-est">${punto(r.estado)} ${semaforoTxt(r.estado)}</td></tr>`).join("")}</tbody>`).join("")}</table>` + leyendaInforme();
   imprimirHTML(html, "print-doc", "@page{size:A4;margin:12mm 13mm}");
 }
 function imprimirEvolucion(p, porDet){
@@ -546,7 +549,7 @@ async function tabLabs(c, p){
   const { data } = await sb.from("v_resultados").select("*").eq("paciente_id", p.id).order("fecha",{ascending:false}).order("orden");
   const fechas = [...new Set(data.map(r=>r.fecha))];
   c.innerHTML = `<div class="row" style="margin-bottom:10px"><span class="muted">${fechas.length} análisis cargados</span><button class="btn pri right" id="bnl">+ Cargar laboratorio</button></div>
-    ${fechas.length?fechas.map(f=>{ const rs=data.filter(r=>r.fecha===f); return `<div class="card tight" style="margin-bottom:12px"><div class="row" style="padding:12px 16px"><h2 style="margin:0">${fecha(f)}</h2><span class="muted">${rs.length} valores</span><button class="btn ghost right" data-pf="${f}">Imprimir</button><button class="btn ghost" data-f="${f}">Editar</button></div><div class="tablewrap"><table><thead><tr><th>Determinación</th><th class="num">Valor</th><th>Unidad</th><th>Rango</th><th>Estado</th></tr></thead><tbody>${rs.map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${valorTxt(r)}</b></td><td class="muted">${esc(r.unidad)}</td><td class="muted">${rango(r)}</td><td><span class="pill ${estadoClase(r.estado)}">${esc(r.estado)}</span></td></tr>`).join("")}</tbody></table></div></div>`; }).join(""):`<div class="card empty">Todavía no hay laboratorios cargados para ${esc(p.nombre)}.</div>`}`;
+    ${fechas.length?fechas.map(f=>{ const rs=data.filter(r=>r.fecha===f); return `<div class="card tight" style="margin-bottom:12px"><div class="row" style="padding:12px 16px"><h2 style="margin:0">${fecha(f)}</h2><span class="muted">${rs.length} valores${rs.find(r=>r.fase)?" · "+esc(rs.find(r=>r.fase).fase):""}</span><button class="btn ghost right" data-pf="${f}">Imprimir</button><button class="btn ghost" data-f="${f}">Editar</button></div><div class="tablewrap"><table><thead><tr><th>Determinación</th><th class="num">Valor</th><th>Unidad</th><th>Rango</th><th>Estado</th></tr></thead><tbody>${rs.map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${valorTxt(r)}</b></td><td class="muted">${esc(r.unidad)}</td><td class="muted">${rango(r)}</td><td><span class="pill ${estadoClase(r.estado)}">${esc(r.estado)}</span></td></tr>`).join("")}</tbody></table></div></div>`; }).join(""):`<div class="card empty">Todavía no hay laboratorios cargados para ${esc(p.nombre)}.</div>`}`;
   $("#bnl").onclick = () => modalLab(p);
   c.querySelectorAll("[data-f]").forEach(b => b.onclick = () => modalLab(p, b.dataset.f, data.filter(r=>r.fecha===b.dataset.f)));
   c.querySelectorAll("[data-pf]").forEach(b => b.onclick = () => imprimirLaboratorio(p, b.dataset.pf, data.filter(r=>r.fecha===b.dataset.pf)));
@@ -554,7 +557,9 @@ async function tabLabs(c, p){
 function rango(r){
   const ref = rtxt(r.rmin, r.rmax);
   const opt = (r.omin!=null||r.omax!=null) ? `óptimo ${rtxt(r.omin, r.omax)}` : "";
-  return [ref,opt].filter(Boolean).join(" · ") || "sin rango";
+  if(r.rango_por && !r.rango_categoria) return r.rango_por==="fase" ? (r.fase ? `sin rango cargado para ${r.fase.toLowerCase()}` : "falta indicar la fase del ciclo") : "sin rango para esta edad (revisar fecha de nacimiento)";
+  const txt = [ref,opt].filter(Boolean).join(" · ") || "sin rango";
+  return r.rango_categoria ? `${r.rango_categoria}: ${txt}` : txt;
 }
 async function modalLab(p, fechaLab=null, previos=[]){
   const dets = await catalogo("determinaciones");
@@ -563,9 +568,11 @@ async function modalLab(p, fechaLab=null, previos=[]){
   abrirModal(fechaLab?"Laboratorio del "+fecha(fechaLab):"Cargar laboratorio · "+p.nombre, `
     <form id="fl" class="grid">
       <div class="fields"><label class="f">Fecha del análisis<input name="fecha" type="date" required value="${fechaLab||hoy()}"></label>
+      <label class="f">Fase del ciclo (para FSH, LH, estradiol, progesterona y estrona)<select name="fase"><option value="">— elegir —</option>${FASES.map(x=>`<option ${previos.find(r=>r.fase)?.fase===x?"selected":""}>${x}</option>`).join("")}<option value="-">No corresponde</option></select></label>
+      ${(!p.sexo||!p.fecha_nacimiento)?`<div class="wide card" style="background:var(--warn-soft);border-color:transparent;padding:10px 12px"><div style="font-size:13px;font-weight:600;margin-bottom:6px">A ${esc(p.nombre)} le falta ${[!p.sexo&&"el sexo",!p.fecha_nacimiento&&"la fecha de nacimiento"].filter(Boolean).join(" y ")}. Se usan para elegir el rango por edad y sexo (testosterona, DHEA, etc.). Si lo completás acá, queda guardado en su ficha.</div><div class="fields">${!p.sexo?`<label class="f">Sexo<select name="pac_sexo"><option value=""></option><option>Femenino</option><option>Masculino</option></select></label>`:""}${!p.fecha_nacimiento?`<label class="f">Fecha de nacimiento<input name="pac_nac" type="date"></label>`:""}</div></div>`:""}
       <label class="f">Buscar determinación<input id="qdet" placeholder="ej. ferritina, TSH…"></label></div>
       <p class="muted" style="margin:0">Completá solo los valores que vinieron en el análisis. Los vacíos se ignoran.</p>
-      <div id="dets">${grupos.map(g=>`<div class="labgroup" data-g="${esc(g)}"><h3>${esc(g)}</h3>${dets.filter(d=>d.grupo===g).map(d=>`<div class="labrow" data-n="${esc(d.nombre.toLowerCase())}"><span>${esc(d.nombre)} <span class="rng">${esc(d.unidad||"")}</span></span>${d.calculada?`<input type="text" readonly data-calc="${esc(d.clave||"")}" data-num="${esc(d.calc_num||"")}" data-den="${esc(d.calc_den||"")}" value="${prev[d.id]?.valor??""}" placeholder="automático" title="Se calcula solo" style="background:var(--surface2);font-weight:700">`:(d.cualitativa?`<select data-d="${d.id}" data-clave="${esc(d.clave||"")}"><option value=""></option><option value="0" ${prev[d.id]&&Number(prev[d.id].valor)===0?"selected":""}>No reactivo</option><option value="1" ${prev[d.id]&&Number(prev[d.id].valor)!==0?"selected":""}>Reactivo</option></select>`:`<input type="number" step="any" inputmode="decimal" data-d="${d.id}" data-clave="${esc(d.clave||"")}" value="${prev[d.id]?.valor??""}" placeholder="valor">`)}<span class="rng">${d.ref_min!=null||d.ref_max!=null?rtxt(d.ref_min,d.ref_max):""}</span></div>`).join("")}</div>`).join("")}</div>
+      <div id="dets">${grupos.map(g=>`<div class="labgroup" data-g="${esc(g)}"><h3>${esc(g)}</h3>${dets.filter(d=>d.grupo===g).map(d=>`<div class="labrow" data-n="${esc(d.nombre.toLowerCase())}"><span>${esc(d.nombre)} <span class="rng">${esc(d.unidad||"")}</span></span>${d.calculada?`<input type="text" readonly data-calc="${esc(d.clave||"")}" data-num="${esc(d.calc_num||"")}" data-den="${esc(d.calc_den||"")}" value="${prev[d.id]?.valor??""}" placeholder="automático" title="Se calcula solo" style="background:var(--surface2);font-weight:700">`:(d.cualitativa?`<select data-d="${d.id}" data-clave="${esc(d.clave||"")}"><option value=""></option><option value="0" ${prev[d.id]&&Number(prev[d.id].valor)===0?"selected":""}>No reactivo</option><option value="1" ${prev[d.id]&&Number(prev[d.id].valor)!==0?"selected":""}>Reactivo</option></select>`:`<input type="number" step="any" inputmode="decimal" data-d="${d.id}" data-clave="${esc(d.clave||"")}" value="${prev[d.id]?.valor??""}" placeholder="valor">`)}<span class="rng">${d.rango_por==="fase"?"según fase":d.rango_por==="edad"?"según edad":(d.ref_min!=null||d.ref_max!=null?rtxt(d.ref_min,d.ref_max):"")}</span></div>`).join("")}</div>`).join("")}</div>
       <div class="row">${fechaLab?`<button type="button" class="btn danger" id="bdell">Eliminar este análisis</button>`:""}<button class="btn pri right" type="submit">Guardar laboratorio</button></div>
     </form>`);
   const calcIndices = () => document.querySelectorAll('#dets [data-calc]').forEach(out => {
@@ -575,9 +582,13 @@ async function modalLab(p, fechaLab=null, previos=[]){
   $("#qdet").oninput = e => { const q=e.target.value.toLowerCase(); document.querySelectorAll(".labrow").forEach(r=>r.hidden = q && !r.dataset.n.includes(q)); document.querySelectorAll(".labgroup").forEach(g=>g.hidden = ![...g.querySelectorAll(".labrow")].some(r=>!r.hidden)); };
   if(fechaLab) $("#bdell").onclick = async () => { if(!(await confirmar("¿Eliminar todos los valores de este análisis?"))) return; const { error } = await sb.from("resultados").delete().eq("paciente_id",p.id).eq("fecha",fechaLab); if(error) return fail(error); cerrarModal(); toast("Análisis eliminado"); render(); };
   $("#fl").onsubmit = async e => { e.preventDefault();
-    const f = new FormData(e.target).get("fecha");
-    const filas = [...document.querySelectorAll("#dets [data-d]")].filter(i=>i.value!=="").map(i=>({ paciente_id:p.id, determinacion_id:i.dataset.d, fecha:f, valor:Number(i.value) }));
+    const fd = new FormData(e.target), f = fd.get("fecha"), faseSel = fd.get("fase"), fase = faseSel && faseSel!=="-" ? faseSel : null;
+    const porFase = new Set(dets.filter(d=>d.rango_por==="fase").map(d=>d.id));
+    const filas = [...document.querySelectorAll("#dets [data-d]")].filter(i=>i.value!=="").map(i=>({ paciente_id:p.id, determinacion_id:i.dataset.d, fecha:f, valor:Number(i.value), fase }));
     if(!filas.length) return toast("No cargaste ningún valor.");
+    if(!faseSel && filas.some(x=>porFase.has(x.determinacion_id))) return toast("Elegí la fase del ciclo (o “No corresponde”) para evaluar FSH, LH, estradiol, progesterona o estrona.");
+    const upd = {}; if(fd.get("pac_sexo")) upd.sexo = fd.get("pac_sexo"); if(fd.get("pac_nac")) upd.fecha_nacimiento = fd.get("pac_nac");
+    if(Object.keys(upd).length){ const r = await sb.from("pacientes").update(upd).eq("id",p.id); if(r.error) return fail(r.error); }
     if(fechaLab){ const r = await sb.from("resultados").delete().eq("paciente_id",p.id).eq("fecha",fechaLab); if(r.error) return fail(r.error); }
     const { error } = await sb.from("resultados").insert(filas); if(error) return fail(error);
     cerrarModal(); toast(`${filas.length} valores guardados`); location.hash = `#/p/${p.id}/labs`; render();
@@ -914,7 +925,7 @@ async function vAjustes(v){
     <div class="tabs"><button class="tab on" data-c="t">Tratamientos</button><button class="tab" data-c="d">Rangos de laboratorio</button></div><div id="cc"></div>`;
   const pintaT = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:10px"><button class="btn pri right" id="bnt">+ Tratamiento</button></div><div class="card tight">${trats.length?`<ul class="list">${trats.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left;cursor:pointer" data-t="${t.id}"><div class="main"><div class="t">${esc(t.nombre)}${t.activo?"":" <span class='pill s-none'>inactivo</span>"}</div><div class="s">${esc(t.categoria||"")}</div></div>${areaPill(t.area)}<div class="r">${pesos(t.precio)}</div></button></li>`).join("")}</ul>`:`<div class="empty">Cargá los tratamientos que hace (facial, PRP, sueroterapia…) con su precio. Así al cargar una visita se completan solos.</div>`}</div>`;
     $("#bnt").onclick=()=>modalTrat({}); $("#cc").querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>modalTrat(trats.find(x=>x.id===b.dataset.t))); };
-  const pintaD = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:8px"><span class="right"></span><button class="btn" id="bplan">Imprimir planilla para completar a mano</button></div><p class="muted">Tocá una determinación para cargar el rango de referencia y el óptimo funcional. Si es distinto para hombres, completá también esos campos.</p><div class="card tight"><div class="tablewrap"><table><thead><tr><th>Determinación</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Hombres</th><th></th></tr></thead><tbody>${dets.map(d=>`<tr><td><b>${esc(d.nombre)}</b><div class="muted" style="font-size:12.5px">${esc(d.grupo)}</div></td><td>${esc(d.unidad||"")}</td><td>${d.ref_min!=null||d.ref_max!=null?rtxt(d.ref_min,d.ref_max):'<span class="muted">—</span>'}</td><td>${d.opt_min!=null||d.opt_max!=null?rtxt(d.opt_min,d.opt_max):'<span class="muted">—</span>'}</td><td class="muted">${[d.ref_min_h,d.ref_max_h,d.opt_min_h,d.opt_max_h].some(x=>x!=null)?"sí":""}</td><td><button class="btn ghost" data-d="${d.id}">Editar</button></td></tr>`).join("")}</tbody></table></div></div>`;
+  const pintaD = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:8px"><span class="right"></span><button class="btn" id="bplan">Imprimir planilla para completar a mano</button></div><p class="muted">Tocá una determinación para cargar el rango de referencia y el óptimo funcional. Si es distinto para hombres, completá también esos campos.</p><div class="card tight"><div class="tablewrap"><table><thead><tr><th>Determinación</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Hombres</th><th></th></tr></thead><tbody>${dets.map(d=>`<tr><td><b>${esc(d.nombre)}</b><div class="muted" style="font-size:12.5px">${esc(d.grupo)}</div></td><td>${esc(d.unidad||"")}</td>${d.rango_por?`<td colspan="2"><span class="pill s-info">${d.rango_por==="fase"?"Según fase del ciclo":"Según edad"}</span></td>`:`<td>${d.ref_min!=null||d.ref_max!=null?rtxt(d.ref_min,d.ref_max):'<span class="muted">—</span>'}</td><td>${d.opt_min!=null||d.opt_max!=null?rtxt(d.opt_min,d.opt_max):'<span class="muted">—</span>'}</td>`}<td class="muted">${[d.ref_min_h,d.ref_max_h,d.opt_min_h,d.opt_max_h].some(x=>x!=null)?"sí":""}</td><td><button class="btn ghost" data-d="${d.id}">Editar</button></td></tr>`).join("")}</tbody></table></div></div>`;
     $("#cc").querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>modalDet(dets.find(x=>x.id===b.dataset.d)));
     $("#bplan").onclick = () => imprimirPlanilla(dets); };
   document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{ document.querySelectorAll("[data-c]").forEach(x=>x.classList.toggle("on",x===b)); b.dataset.c==="t"?pintaT():pintaD(); });
@@ -932,36 +943,48 @@ function modalTrat(t){
   $("#ft").onsubmit = async e => { e.preventDefault(); const d=Object.fromEntries(new FormData(e.target)); d.activo=!!d.activo; for(const k in d) if(d[k]==="") d[k]=null;
     const r = nuevo ? await sb.from("tratamientos").insert(d) : await sb.from("tratamientos").update(d).eq("id",t.id); if(r.error) return fail(r.error); cerrarModal(); toast("Tratamiento guardado"); cache.tratamientos=null; render(); };
 }
-function modalDet(d){
+async function modalDet(d){
+  const { data: esp } = await sb.from("rangos_especiales").select("*").eq("determinacion_id", d.id);
   const tipoDe = (a,b) => a!=null&&b!=null ? "entre" : a!=null ? "mayor" : b!=null ? "menor" : "";
-  const bloque = (pre, titulo) => { const a=d[pre+"_min"], b=d[pre+"_max"]; const t=tipoDe(a,b);
-    return `<div class="wide rgbox" data-pre="${pre}"><div class="f" style="margin-bottom:4px">${titulo}</div><div class="row" style="flex-wrap:nowrap">
+  const bloque = (key, titulo, a, b) => { const t=tipoDe(a,b);
+    return `<div class="rgbox" data-key="${esc(key)}"><div class="f" style="margin-bottom:4px">${titulo}</div><div class="row" style="flex-wrap:nowrap">
       <select class="rg-t" style="width:auto"><option value="" ${t===""?"selected":""}>Sin rango</option><option value="entre" ${t==="entre"?"selected":""}>Entre</option><option value="mayor" ${t==="mayor"?"selected":""}>Mayor a</option><option value="menor" ${t==="menor"?"selected":""}>Menor a</option></select>
       <input class="rg-a" type="number" step="any" inputmode="decimal" placeholder="desde" value="${a??""}"><span class="rg-y">y</span><input class="rg-b" type="number" step="any" inputmode="decimal" placeholder="hasta" value="${b??""}"></div></div>`; };
+  const fila = (cat, sexo, etiqueta) => { const e = (esp||[]).find(x=>x.categoria===cat && x.sexo===sexo) || {};
+    return `<div class="wide card espfila" data-cat="${esc(cat)}" data-sexo="${sexo}" style="padding:10px 12px"><b>${esc(etiqueta)}</b><div class="fields" style="margin-top:6px">${bloque("ref","Referencia",e.ref_min,e.ref_max)}${bloque("opt","Óptimo",e.opt_min,e.opt_max)}</div></div>`; };
   abrirModal(d.nombre, `<form id="fd" class="fields">
-    <label class="f">Unidad<input name="unidad" value="${esc(d.unidad)}"></label><div></div>
-    ${bloque("ref","Rango de referencia")}${bloque("opt","Rango óptimo")}
-    <h3 class="wide">Solo si es distinto para hombres</h3>
-    ${bloque("ref","Referencia (hombres)").replace('data-pre="ref"','data-pre="ref_h"')}${bloque("opt","Óptimo (hombres)").replace('data-pre="opt"','data-pre="opt_h"')}
+    <label class="f">Unidad<input name="unidad" value="${esc(d.unidad)}"></label>
+    <label class="f">El rango depende de<select id="rpor"><option value="">Un solo rango</option><option value="fase" ${d.rango_por==="fase"?"selected":""}>Fase del ciclo</option><option value="edad" ${d.rango_por==="edad"?"selected":""}>Edad (21 a 49 / 50 o más)</option></select></label>
+    <div class="wide" id="secbase"><div class="fields">${bloque("ref","Rango de referencia",d.ref_min,d.ref_max).replace('class="rgbox"','class="rgbox base"')}${bloque("opt","Rango óptimo",d.opt_min,d.opt_max).replace('class="rgbox"','class="rgbox base"')}</div>
+      <h3>Solo si es distinto para hombres</h3><div class="fields">${bloque("ref_h","Referencia (hombres)",d.ref_min_h,d.ref_max_h).replace('class="rgbox"','class="rgbox base"')}${bloque("opt_h","Óptimo (hombres)",d.opt_min_h,d.opt_max_h).replace('class="rgbox"','class="rgbox base"')}</div></div>
+    <div class="wide" id="secfase" hidden><p class="muted" style="margin:0 0 8px">Al cargar un laboratorio se elige la fase y se usa el rango de esa fase.</p><div class="fields">${FASES.map(x=>fila(x,"Todos",x)).join("")}</div></div>
+    <div class="wide" id="secedad" hidden><p class="muted" style="margin:0 0 8px">Se usa la edad del paciente a la fecha del análisis (hace falta su fecha de nacimiento). Si no tiene sexo cargado, se usan los rangos de mujeres.</p><div class="fields">${EDADES.flatMap(x=>[fila(x,"Femenino",`Mujeres · ${x} años`),fila(x,"Masculino",`Hombres · ${x} años`)]).join("")}</div></div>
     <label class="f wide">Notas<input name="notas" value="${esc(d.notas)}"></label>
     <div class="wide row"><button class="btn pri right">Guardar</button></div></form>`);
-  // los bloques de hombres arrancan con sus propios valores
-  [["ref_h","ref_min_h","ref_max_h"],["opt_h","opt_min_h","opt_max_h"]].forEach(([pre,ka,kb]) => { const box=$(`[data-pre="${pre}"]`); const a=d[ka], b=d[kb];
-    $(".rg-a",box).value = a??""; $(".rg-b",box).value = b??""; $(".rg-t",box).value = tipoDe(a,b); });
   const ajustar = box => { const t=$(".rg-t",box).value; $(".rg-a",box).hidden = !(t==="entre"||t==="mayor"); $(".rg-b",box).hidden = !(t==="entre"||t==="menor"); $(".rg-y",box).hidden = t!=="entre"; };
   document.querySelectorAll(".rgbox").forEach(box => { ajustar(box); $(".rg-t",box).onchange = () => ajustar(box); });
+  const secciones = () => { const v=$("#rpor").value; $("#secbase").hidden = !!v; $("#secfase").hidden = v!=="fase"; $("#secedad").hidden = v!=="edad"; };
+  $("#rpor").onchange = secciones; secciones();
+  const leer = box => { const t=$(".rg-t",box).value, a=$(".rg-a",box).value, b=$(".rg-b",box).value;
+    const mn = (t==="entre"||t==="mayor") && a!=="" ? Number(a) : null, mx = (t==="entre"||t==="menor") && b!=="" ? Number(b) : null;
+    if(t==="entre" && (mn==null||mx==null)) throw "Completá los dos valores del rango “entre”.";
+    if(t==="entre" && mn>mx) throw "En un rango “entre”, el primer número tiene que ser menor que el segundo.";
+    if((t==="mayor"&&mn==null)||(t==="menor"&&mx==null)) throw "Falta el número de un rango.";
+    return [mn, mx]; };
   $("#fd").onsubmit = async e => { e.preventDefault();
-    const x = { unidad: $("#fd [name=unidad]").value.trim() || null, notas: $("#fd [name=notas]").value.trim() || null, rangos_revisados: true };
-    for(const box of document.querySelectorAll(".rgbox")){
-      const pre = box.dataset.pre, suf = pre.endsWith("_h") ? "_h" : "", base = pre.replace("_h","");
-      const t = $(".rg-t",box).value, a = $(".rg-a",box).value, b = $(".rg-b",box).value;
-      let mn = (t==="entre"||t==="mayor") && a!=="" ? Number(a) : null, mx = (t==="entre"||t==="menor") && b!=="" ? Number(b) : null;
-      if(t==="entre" && (mn==null||mx==null)) return toast("Completá los dos valores del rango “entre”.");
-      if(t==="entre" && mn>mx) return toast("En un rango “entre”, el primer número tiene que ser menor que el segundo.");
-      if((t==="mayor"&&mn==null)||(t==="menor"&&mx==null)) return toast("Falta el número del rango.");
-      x[`${base}_min${suf}`] = mn; x[`${base}_max${suf}`] = mx;
-    }
-    const { error } = await sb.from("determinaciones").update(x).eq("id",d.id); if(error) return fail(error); cerrarModal(); toast("Rangos guardados"); cache.determinaciones=null; render(); };
+    const rpor = $("#rpor").value || null;
+    const x = { unidad: $("#fd [name=unidad]").value.trim() || null, notas: $("#fd [name=notas]").value.trim() || null, rangos_revisados: true, rango_por: rpor };
+    const filas = [];
+    try{
+      for(const box of document.querySelectorAll("#secbase .rgbox")){ const [mn,mx]=leer(box); const k=box.dataset.key, base=k.replace("_h",""), suf=k.endsWith("_h")?"_h":""; x[`${base}_min${suf}`]=mn; x[`${base}_max${suf}`]=mx; }
+      const sec = rpor==="fase" ? "#secfase" : rpor==="edad" ? "#secedad" : null;
+      if(sec) for(const f of document.querySelectorAll(sec+" .espfila")){ const [rmn,rmx]=leer($('[data-key="ref"]',f)); const [omn,omx]=leer($('[data-key="opt"]',f));
+        if([rmn,rmx,omn,omx].some(v=>v!=null)) filas.push({ determinacion_id: d.id, categoria: f.dataset.cat, sexo: f.dataset.sexo, ref_min:rmn, ref_max:rmx, opt_min:omn, opt_max:omx }); }
+    }catch(err){ return toast(err); }
+    const r1 = await sb.from("determinaciones").update(x).eq("id",d.id); if(r1.error) return fail(r1.error);
+    if(rpor){ const r2 = await sb.from("rangos_especiales").delete().eq("determinacion_id", d.id); if(r2.error) return fail(r2.error);
+      if(filas.length){ const r3 = await sb.from("rangos_especiales").insert(filas); if(r3.error) return fail(r3.error); } }
+    cerrarModal(); toast("Rangos guardados"); cache.determinaciones=null; render(); };
 }
 
 /* ---------- modales ---------- */
