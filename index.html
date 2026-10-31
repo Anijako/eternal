@@ -200,7 +200,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31l";
+const APP_VERSION = "2026-10-31m";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -531,9 +531,10 @@ function imprimirHTML(html, clase, pageCss){
   st.textContent = pageCss;
   let bar = document.getElementById("prbar");
   if(!bar){ bar = document.createElement("div"); bar.id = "prbar";
-    bar.innerHTML = `<button class="btn sec" id="prcerrar">← Volver</button><span style="flex:1;font-weight:600">Vista previa</span><button class="btn" id="prok">Imprimir</button>`;
+    bar.innerHTML = `<button class="btn sec" id="prcerrar">← Volver</button><span style="flex:1;font-weight:600">Vista previa</span><button class="btn sec" id="prpdf">Abrir aparte (PDF / compartir)</button><button class="btn" id="prok">Imprimir</button>`;
     document.body.appendChild(bar);
-    $("#prok").onclick = () => window.print();
+    $("#prok").onclick = () => { let ok = false; try{ ok = document.execCommand("print", false, null); }catch(e){} if(!ok) window.print(); };
+    $("#prpdf").onclick = abrirAparte;
     $("#prcerrar").onclick = () => document.body.classList.remove("preview"); }
   document.body.classList.add("preview");
 }
@@ -846,6 +847,28 @@ async function modalEtiquetas(loteId){
 }
 function etiquetaHTML(u){
   return `<img src="logo.png" alt=""><div class="etq-t"><div class="etq-n">${esc(u.producto)}</div><div class="etq-l">Lote <b>${esc(u.lote)}</b></div><div class="etq-c">${esc(u.codigo_corto)}</div>${u.vencimiento?`<div class="etq-v">Vto. ${mmaa(u.vencimiento)}</div>`:""}</div>`;
+}
+// Abre el informe en una página nueva e independiente (sirve si Safari bloquea la impresión, y para guardar en PDF o compartir)
+let LOGO_DATA = null;
+try{ fetch("logo.png").then(r=>r.blob()).then(b=>{ const fr=new FileReader(); fr.onload=()=>{ LOGO_DATA=fr.result; }; fr.readAsDataURL(b); }).catch(()=>{}); }catch(e){}
+function abrirAparte(){
+  const zona = document.getElementById("print"); if(!zona) return;
+  const base = location.href.replace(/[#?].*$/,"").replace(/[^\/]*$/,"");
+  const estilos = [...document.querySelectorAll("style")].map(x=>x.textContent).join("\n");
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><base href="${base}"><title>Eternal Secret · Informe</title>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>${estilos}
+body{background:#fff;color:#1a1a1a;margin:0}
+#print{display:block!important;position:static!important;padding:70px 18px 24px}
+#print.print-a4{display:grid!important;grid-template-columns:repeat(3,63.5mm);column-gap:2.5mm;grid-auto-rows:38.1mm}
+#barra{position:fixed;top:0;left:0;right:0;display:flex;gap:10px;align-items:center;padding:10px 16px;background:#5B2A4C;color:#fff;z-index:5;font:600 16px -apple-system,sans-serif}
+#barra button{font:600 16px -apple-system,sans-serif;padding:10px 18px;border-radius:10px;border:0;background:#fff;color:#5B2A4C}
+@media print{#barra{display:none}#print{padding:0}}
+</style></head><body><div id="barra"><span style="flex:1">Informe listo · usá Imprimir o el botón Compartir del navegador para guardarlo en PDF</span><button onclick="window.print()">Imprimir</button></div>
+<div id="print" class="${zona.className}">${LOGO_DATA ? zona.innerHTML.replaceAll('src="logo.png"', `src="${LOGO_DATA}"`) : zona.innerHTML}</div></body></html>`;
+  const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  const w = window.open(url, "_blank");
+  if(!w) toast("El iPad bloqueó la ventana nueva: probá de nuevo o permití ventanas emergentes.");
 }
 function imprimirEtiquetas(lista, formato, saltear){
   cerrarModal();
