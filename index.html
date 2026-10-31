@@ -177,7 +177,7 @@ td.num,th.num{text-align:right}
 .xl-act{font-size:8pt;color:#333}.xl-vacio{color:#999;font-style:italic}
 .xl-in{height:17px;background:#fff}.xl-gris{background:#f3f3f3}
 .xl-sub td:first-child{padding-left:14px;font-size:8.3pt;color:#444}
-.xl-chk{font-size:8pt;white-space:nowrap}
+.xl-chk{font-size:8pt;white-space:nowrap}.xl-val{text-align:center;font-weight:600}
 .xl-lab{background:#ececec;font-weight:700;font-size:8pt;white-space:nowrap;width:1%}
 .inf-evo{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .inf-ev{border:1px solid #ddd;border-radius:6px;padding:7px 9px;break-inside:avoid}
@@ -191,7 +191,7 @@ td.num,th.num{text-align:right}
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31j";
+const APP_VERSION = "2026-10-31k";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -528,26 +528,26 @@ async function imprimirPlanilla(dets){
   const { data: esp } = await sb.from("rangos_especiales").select("*");
   const L = dets.filter(d=>!d.calculada);
   const grupos = [...new Set(L.map(d=>d.grupo))];
-  const actual = (rmin,rmax,omin,omax) => { const r=rtxt(rmin,rmax), o=rtxt(omin,omax); return [r&&`Ref. ${r}`, o&&`Ópt. ${o}`].filter(Boolean).join("<br>") || '<span class="xl-vacio">sin cargar</span>'; };
-  const celdas = n => '<td class="xl-in"></td>'.repeat(n);
+  const v = x => x!=null ? `<td class="xl-in xl-val">${num(x)}</td>` : '<td class="xl-in"></td>';
+  const rango4 = (a,b,c,d) => v(a)+v(b)+v(c)+v(d);
   const filaDet = d => {
     if(d.rango_por){
       const cats = d.rango_por==="fase" ? FASES.map(c=>[c,"Todos",c]) : EDADES.flatMap(e=>[[e,"Femenino",`${e} · mujeres`],[e,"Masculino",`${e} · hombres`]]);
-      return `<tr><td><b>${esc(d.nombre)}</b></td><td>${esc(d.unidad||"")}</td><td class="xl-act">según ${d.rango_por==="fase"?"fase del ciclo":"edad"} ↓</td>${'<td class="xl-gris"></td>'.repeat(4)}<td class="xl-in"></td></tr>` +
-        cats.map(([c,sx,et])=>{ const e=(esp||[]).find(x=>x.determinacion_id===d.id&&x.categoria===c&&x.sexo===sx)||{}; return `<tr class="xl-sub"><td>↳ ${esc(et)}</td><td></td><td class="xl-act">${actual(e.ref_min,e.ref_max,e.opt_min,e.opt_max)}</td>${celdas(4)}<td class="xl-gris"></td></tr>`; }).join("");
+      return `<tr><td><b>${esc(d.nombre)}</b> <span class="xl-act">(según ${d.rango_por==="fase"?"fase del ciclo":"edad"})</span></td><td>${esc(d.unidad||"")}</td>${'<td class="xl-gris"></td>'.repeat(4)}<td class="xl-in"></td></tr>` +
+        cats.map(([c,sx,et])=>{ const e=(esp||[]).find(x=>x.determinacion_id===d.id&&x.categoria===c&&x.sexo===sx)||{}; return `<tr class="xl-sub"><td>↳ ${esc(et)}</td><td></td>${rango4(e.ref_min,e.ref_max,e.opt_min,e.opt_max)}<td class="xl-gris"></td></tr>`; }).join("");
     }
-    if(d.cualitativa) return `<tr><td><b>${esc(d.nombre)}</b></td><td></td><td class="xl-act">No reactivo</td>${'<td class="xl-gris"></td>'.repeat(4)}<td class="xl-in xl-chk">☐ NR ☐ R</td></tr>`;
-    return `<tr><td><b>${esc(d.nombre)}</b></td><td>${esc(d.unidad||"")}</td><td class="xl-act">${actual(d.ref_min,d.ref_max,d.opt_min,d.opt_max)}</td>${celdas(5)}</tr>`;
+    if(d.cualitativa) return `<tr><td><b>${esc(d.nombre)}</b> <span class="xl-act">(normal: No reactivo)</span></td><td></td>${'<td class="xl-gris"></td>'.repeat(4)}<td class="xl-in xl-chk">☐ NR ☐ R</td></tr>`;
+    return `<tr><td><b>${esc(d.nombre)}</b></td><td>${esc(d.unidad||"")}</td>${rango4(d.ref_min,d.ref_max,d.opt_min,d.opt_max)}<td class="xl-in"></td></tr>`;
   };
   const html = `<header class="inf-head"><img src="logo.png" alt=""><div class="inf-dra"><div class="inf-marca">Eternal Secret</div><div><b>${DRA}</b></div><div class="inf-mut">Medicina funcional y estética</div></div>
       <div class="inf-tit"><div class="inf-h">Planilla de rangos de laboratorio</div><div class="inf-mut">Impresa el ${fecha(hoy())}</div></div></header>
     <table class="xl-cab"><tr><td class="xl-lab">Paciente</td><td class="xl-in" style="width:45%"></td><td class="xl-lab">Fecha</td><td class="xl-in" style="width:14%">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/</td><td class="xl-lab">Laboratorio</td><td class="xl-in"></td></tr>
       <tr><td class="xl-lab">Fase del ciclo</td><td colspan="5">${FASES.map(x=>"☐ "+x).join(" &nbsp; ")} &nbsp; ☐ No corresponde</td></tr></table>
-    <table class="xl"><colgroup><col style="width:24%"><col style="width:8%"><col style="width:17%"><col span="4" style="width:9.5%"><col style="width:13%"></colgroup>
-      <thead><tr><th rowspan="2">Determinación</th><th rowspan="2">Unidad</th><th rowspan="2">Rango cargado en la app</th><th colspan="2">Referencia nueva</th><th colspan="2">Óptimo nuevo</th><th rowspan="2">Resultado</th></tr>
+    <table class="xl"><colgroup><col style="width:31%"><col style="width:9%"><col span="4" style="width:11%"><col style="width:16%"></colgroup>
+      <thead><tr><th rowspan="2">Determinación</th><th rowspan="2">Unidad</th><th colspan="2">Rango de referencia</th><th colspan="2">Rango óptimo</th><th rowspan="2">Resultado</th></tr>
       <tr><th>desde</th><th>hasta</th><th>desde</th><th>hasta</th></tr></thead>
-      ${grupos.map(g=>`<tbody><tr class="xl-grp"><td colspan="8">${esc(g)}</td></tr>${L.filter(d=>d.grupo===g).map(filaDet).join("")}</tbody>`).join("")}</table>
-    <p class="inf-mut" style="margin-top:6px">“Mayor a” un número: completar solo “desde”. “Menor a”: completar solo “hasta”. Los índices (Apo B / Apo A y TG / HDL) los calcula la app.</p>`;
+      ${grupos.map(g=>`<tbody><tr class="xl-grp"><td colspan="7">${esc(g)}</td></tr>${L.filter(d=>d.grupo===g).map(filaDet).join("")}</tbody>`).join("")}</table>
+    <p class="inf-mut" style="margin-top:6px">Los números impresos son los rangos que ya están cargados en la app; las celdas vacías son para completar. “Mayor a” un número: completar solo “desde”. “Menor a”: completar solo “hasta”. Los índices (Apo B / Apo A y TG / HDL) los calcula la app.</p>`;
   imprimirHTML(html, "print-doc", "@page{size:A4 landscape;margin:9mm 10mm}");
 }
 function imprimirLaboratorio(p, f, rs){
