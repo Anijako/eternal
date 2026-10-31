@@ -211,7 +211,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31q";
+const APP_VERSION = "2026-10-31r";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -426,6 +426,9 @@ async function modalTurno(t){
   const cfg = await configAgenda();
   const nuevo = !t.id; let pac = t.paciente_id ? { id:t.paciente_id, nombre:t.paciente, telefono:t.telefono } : (t.pac || null);
   const dur = t.duracion || Number(cfg.duracion) || 30;
+  // El enlace de WhatsApp se arma antes: Safari solo abre WhatsApp si el toque va directo a un enlace
+  const tel = nuevo ? null : telWhatsApp(t.telefono);
+  const waUrl = tel ? `https://wa.me/${tel}?text=${encodeURIComponent(await mensajeTurno(t))}` : null;
   abrirModal(nuevo ? "Nuevo turno" : `Turno · ${t.paciente}`, `<form id="fturno" class="grid">
     <div id="tpac"></div>
     <div class="fields">
@@ -440,7 +443,8 @@ async function modalTurno(t){
     <div id="taviso" style="color:var(--warn);font-weight:600"></div>
     <div class="row">${nuevo?"":`<button type="button" class="btn danger" id="tdel">Eliminar</button>`}<button class="btn pri right" type="submit">${nuevo?"Guardar turno":"Guardar cambios"}</button></div>
     ${nuevo?"":`<div class="card" style="background:var(--accent-soft);border-color:transparent"><div class="row">
-      <button type="button" class="btn pri" id="twa">Enviar por WhatsApp${t.whatsapp_enviado?" (ya enviado)":""}</button>
+      ${waUrl ? `<a class="btn pri" id="twa" href="${waUrl}" target="_blank" rel="noopener">Enviar por WhatsApp${t.whatsapp_enviado?" (ya enviado)":""}</a>`
+        : `<div class="row" style="flex-wrap:nowrap;flex:1;min-width:280px"><input id="ttel" type="tel" placeholder="Celular del paciente (ej. 11 5555-1234)"><button type="button" class="btn pri" id="ttelok">Guardar celular</button></div>`}
       <button type="button" class="btn" id="tics">Agregar a mi calendario</button>
       <button type="button" class="btn" id="tvis">Paciente atendido → cargar visita</button></div></div>`}
   </form>`);
@@ -474,7 +478,10 @@ async function modalTurno(t){
   };
   if(!nuevo){
     $("#tdel").onclick = async () => { if(!(await confirmar("¿Eliminar este turno? (si la paciente canceló, mejor cambiá el estado a Cancelado)"))) return; const { error } = await sb.from("turnos").delete().eq("id", t.id); if(error) return fail(error); cerrarModal(); toast("Turno eliminado"); render(); };
-    $("#twa").onclick = async () => { await enviarWhatsApp(t); };
+    if(waUrl) $("#twa").addEventListener("click", () => { sb.from("turnos").update({ whatsapp_enviado: new Date().toISOString() }).eq("id", t.id).then(()=>{}); });
+    else $("#ttelok").onclick = async () => { const v = $("#ttel").value.trim(); if(!telWhatsApp(v)) return toast("Ese número no parece válido. Escribilo con característica, ej. 11 5555-1234.");
+      const { error } = await sb.from("pacientes").update({ telefono: v }).eq("id", t.paciente_id); if(error) return fail(error);
+      toast("Celular guardado"); modalTurno({ ...t, telefono: v }); };
     $("#tics").onclick = () => icsTurno(t);
     $("#tvis").onclick = async () => { await sb.from("turnos").update({ estado:"Atendido" }).eq("id", t.id); const { data: p } = await sb.from("v_pacientes").select("*").eq("id", t.paciente_id).single(); cerrarModal(); location.hash = `#/p/${t.paciente_id}/visitas`; setTimeout(()=>modalVisita(p, null, { fecha: t.fecha, motivo: t.motivo, area: t.area }), 600); };
   }
