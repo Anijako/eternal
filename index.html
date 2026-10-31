@@ -165,6 +165,10 @@ td.num,th.num{text-align:right}
 .inf-est{white-space:nowrap}
 .inf-ley{margin-top:12px;border-top:1px solid #ccc;padding-top:6px;font-size:8.5pt;color:#444;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
 .inf-firma{margin-left:auto;font-weight:600;color:#5B2A4C}
+ .pl-datos{display:flex;flex-wrap:wrap;gap:8px 24px;margin:4px 0 10px;font-size:10.5pt}
+.pl-l{display:inline-block;min-width:22mm;border-bottom:1px solid #777;height:1.1em;vertical-align:bottom}
+.pl-largo{min-width:80mm}.pl-medio{min-width:50mm}.pl-fecha{min-width:30mm;color:#777}
+.pl-tab td{padding:5px 6px}.pl-tab th small{text-transform:none;font-weight:400}
 .inf-evo{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .inf-ev{border:1px solid #ddd;border-radius:6px;padding:7px 9px;break-inside:avoid}
 .inf-ev-h{display:flex;justify-content:space-between}.inf-ev-h span,.inf-ev-r{color:#666;font-size:8.5pt}
@@ -177,7 +181,7 @@ td.num,th.num{text-align:right}
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31f";
+const APP_VERSION = "2026-10-31g";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -506,6 +510,19 @@ function imprimirHTML(html, clase, pageCss){
   Promise.all(imgs.map(i => i.complete ? 1 : new Promise(r => { i.onload = i.onerror = r; }))).then(() => {
     document.body.classList.add("printing"); setTimeout(() => { window.print(); setTimeout(()=>document.body.classList.remove("printing"), 500); }, 80);
   });
+}
+function imprimirPlanilla(dets){
+  const L = dets.filter(d=>!d.calculada);
+  const grupos = [...new Set(L.map(d=>d.grupo))];
+  const linea = '<span class="pl-l"></span>';
+  const html = `<header class="inf-head"><img src="logo.png" alt=""><div class="inf-dra"><div class="inf-marca">Eternal Secret</div><div><b>${DRA}</b></div><div class="inf-mut">Medicina funcional y estética</div></div>
+      <div class="inf-tit"><div class="inf-h">Planilla de laboratorio</div><div class="inf-mut">Para completar a mano</div></div></header>
+    <section class="pl-datos"><div>Paciente: <span class="pl-l pl-largo"></span></div><div>Fecha del análisis: <span class="pl-l pl-fecha">&nbsp;&nbsp;&nbsp;&nbsp;/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/</span></div><div>Laboratorio: <span class="pl-l pl-medio"></span></div></section>
+    <table class="inf-tab pl-tab"><thead><tr><th>Determinación</th><th>Unidad</th><th>Resultado</th><th>Rango de referencia<br><small>desde – hasta</small></th><th>Rango óptimo<br><small>desde – hasta</small></th></tr></thead>
+    ${grupos.map(g=>`<tbody><tr class="inf-grp"><td colspan="5">${esc(g)}</td></tr>${L.filter(d=>d.grupo===g).map(d=>`<tr><td>${esc(d.nombre)}</td><td>${esc(d.unidad||"")}</td><td>${d.cualitativa?"☐ No reactivo &nbsp; ☐ Reactivo":linea}</td><td>${d.cualitativa?"":linea+" – "+linea}</td><td>${d.cualitativa?"":linea+" – "+linea}</td></tr>`).join("")}</tbody>`).join("")}</table>
+    <p class="inf-mut" style="margin-top:8px">Los índices (perfil de oxidación Apo B / Apo A y perfil de inflamación metabólica TG / HDL) no se anotan: la app los calcula sola.</p>
+    <footer class="inf-ley">Observaciones: <span class="pl-l pl-largo"></span><div class="inf-firma">${DRA}</div></footer>`;
+  imprimirHTML(html, "print-doc", "@page{size:A4;margin:11mm 12mm}");
 }
 function imprimirLaboratorio(p, f, rs){
   const grupos = [...new Set(rs.map(r=>r.grupo))];
@@ -896,8 +913,9 @@ async function vAjustes(v){
     <div class="tabs"><button class="tab on" data-c="t">Tratamientos</button><button class="tab" data-c="d">Rangos de laboratorio</button></div><div id="cc"></div>`;
   const pintaT = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:10px"><button class="btn pri right" id="bnt">+ Tratamiento</button></div><div class="card tight">${trats.length?`<ul class="list">${trats.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left;cursor:pointer" data-t="${t.id}"><div class="main"><div class="t">${esc(t.nombre)}${t.activo?"":" <span class='pill s-none'>inactivo</span>"}</div><div class="s">${esc(t.categoria||"")}</div></div>${areaPill(t.area)}<div class="r">${pesos(t.precio)}</div></button></li>`).join("")}</ul>`:`<div class="empty">Cargá los tratamientos que hace (facial, PRP, sueroterapia…) con su precio. Así al cargar una visita se completan solos.</div>`}</div>`;
     $("#bnt").onclick=()=>modalTrat({}); $("#cc").querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>modalTrat(trats.find(x=>x.id===b.dataset.t))); };
-  const pintaD = () => { $("#cc").innerHTML = `<p class="muted">Tocá una determinación para cargar el rango de referencia y el óptimo funcional. Si es distinto para hombres, completá también esos campos.</p><div class="card tight"><div class="tablewrap"><table><thead><tr><th>Determinación</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Hombres</th><th></th></tr></thead><tbody>${dets.map(d=>`<tr><td><b>${esc(d.nombre)}</b><div class="muted" style="font-size:12.5px">${esc(d.grupo)}</div></td><td>${esc(d.unidad||"")}</td><td>${d.ref_min!=null||d.ref_max!=null?`${d.ref_min??"…"}–${d.ref_max??"…"}`:'<span class="muted">—</span>'}</td><td>${d.opt_min!=null||d.opt_max!=null?`${d.opt_min??"…"}–${d.opt_max??"…"}`:'<span class="muted">—</span>'}</td><td class="muted">${[d.ref_min_h,d.ref_max_h,d.opt_min_h,d.opt_max_h].some(x=>x!=null)?"sí":""}</td><td><button class="btn ghost" data-d="${d.id}">Editar</button></td></tr>`).join("")}</tbody></table></div></div>`;
-    $("#cc").querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>modalDet(dets.find(x=>x.id===b.dataset.d))); };
+  const pintaD = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:8px"><span class="right"></span><button class="btn" id="bplan">Imprimir planilla para completar a mano</button></div><p class="muted">Tocá una determinación para cargar el rango de referencia y el óptimo funcional. Si es distinto para hombres, completá también esos campos.</p><div class="card tight"><div class="tablewrap"><table><thead><tr><th>Determinación</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Hombres</th><th></th></tr></thead><tbody>${dets.map(d=>`<tr><td><b>${esc(d.nombre)}</b><div class="muted" style="font-size:12.5px">${esc(d.grupo)}</div></td><td>${esc(d.unidad||"")}</td><td>${d.ref_min!=null||d.ref_max!=null?`${d.ref_min??"…"}–${d.ref_max??"…"}`:'<span class="muted">—</span>'}</td><td>${d.opt_min!=null||d.opt_max!=null?`${d.opt_min??"…"}–${d.opt_max??"…"}`:'<span class="muted">—</span>'}</td><td class="muted">${[d.ref_min_h,d.ref_max_h,d.opt_min_h,d.opt_max_h].some(x=>x!=null)?"sí":""}</td><td><button class="btn ghost" data-d="${d.id}">Editar</button></td></tr>`).join("")}</tbody></table></div></div>`;
+    $("#cc").querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>modalDet(dets.find(x=>x.id===b.dataset.d)));
+    $("#bplan").onclick = () => imprimirPlanilla(dets); };
   document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{ document.querySelectorAll("[data-c]").forEach(x=>x.classList.toggle("on",x===b)); b.dataset.c==="t"?pintaT():pintaD(); });
   pintaT();
 }
