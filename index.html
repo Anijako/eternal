@@ -211,7 +211,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31s";
+const APP_VERSION = "2026-10-31t";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -351,6 +351,9 @@ const masDias = (iso, n) => { const d = dDe(iso); d.setDate(d.getDate()+n); retu
 const lunesDe = iso => { const d = dDe(iso); const w = (d.getDay()+6)%7; d.setDate(d.getDate()-w); return isoDe(d); };
 const minDe = h => { const [a,b] = h.slice(0,5).split(":").map(Number); return a*60+b; };
 const hDe = m => String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+// Selector de horario en formato 24 hs (el campo "time" del iPad muestra AM/PM según la configuración del equipo)
+const opcionesHora = (sel, paso=15, desde=6*60, hasta=23*60) => { const L=[]; for(let m=desde; m<=hasta; m+=paso) L.push(hDe(m)); if(sel && !L.includes(sel)) { L.push(sel); L.sort(); }
+  return L.map(h=>`<option value="${h}" ${h===sel?"selected":""}>${h} hs</option>`).join(""); };
 const fechaLarga = iso => { const d = dDe(iso); return `${DIAS[d.getDay()]} ${d.getDate()}/${String(d.getMonth()+1).padStart(2,"0")}`; };
 async function leerConfig(clave, def){ const { data } = await sb.from("config").select("valor").eq("clave", clave).maybeSingle(); return data ? data.valor : def; }
 async function configAgenda(){ return await leerConfig("agenda", { duracion:30, dias:{ "1":["09:00","19:00"],"2":["09:00","19:00"],"3":["09:00","19:00"],"4":["09:00","19:00"],"5":["09:00","19:00"] } }); }
@@ -437,7 +440,7 @@ async function modalTurno(t){
     <div id="tpac"></div>
     <div class="fields">
       <label class="f">Fecha<input name="fecha" type="date" required value="${t.fecha||hoy()}"></label>
-      <label class="f">Hora<input name="hora" type="time" step="300" required value="${(t.hora||"").slice(0,5)}"></label>
+      <label class="f">Hora<select name="hora" required><option value="">— elegir —</option>${opcionesHora((t.hora||"").slice(0,5), 5)}</select></label>
       <label class="f">Duración (min)<select name="duracion">${[15,20,30,40,45,60,75,90,120].map(m=>`<option ${m===dur?"selected":""}>${m}</option>`).join("")}</select></label>
       <label class="f">Área<select name="area"><option value=""></option>${["Estética","Funcional","Funcional y Estética"].map(a=>`<option ${t.area===a?"selected":""}>${a}</option>`).join("")}</select></label>
       <label class="f">Modalidad<select name="modalidad">${["Presencial","Virtual"].map(m=>`<option ${(t.modalidad||"Presencial")===m?"selected":""}>${m}</option>`).join("")}</select></label>
@@ -500,7 +503,7 @@ async function pintaAgendaCfg(c){
   const cfg = await configAgenda(); const msg = await leerConfig("mensaje_turno", ""); const token = await leerConfig("calendario_token", "");
   const url = `${SUPABASE_URL}/functions/v1/agenda-ics?token=${token}`;
   c.innerHTML = `<form id="fcfg" class="grid">
-    <div class="card"><h2>Horario de atención</h2><table>${[1,2,3,4,5,6,0].map(w=>{ const r=cfg.dias?.[String(w)]; return `<tr><td style="width:140px"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-w="${w}" ${r?"checked":""} style="width:auto;min-height:0"> ${DIAS[w]}</label></td><td><input type="time" step="900" data-wd="${w}" value="${r?r[0]:"09:00"}" style="width:auto"></td><td>a</td><td><input type="time" step="900" data-wh="${w}" value="${r?r[1]:"19:00"}" style="width:auto"></td></tr>`; }).join("")}</table>
+    <div class="card"><h2>Horario de atención</h2><table>${[1,2,3,4,5,6,0].map(w=>{ const r=cfg.dias?.[String(w)]; return `<tr><td style="width:140px"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-w="${w}" ${r?"checked":""} style="width:auto;min-height:0"> ${DIAS[w]}</label></td><td><select data-wd="${w}" style="width:auto">${opcionesHora(r?r[0]:"09:00", 30)}</select></td><td>a</td><td><select data-wh="${w}" style="width:auto">${opcionesHora(r?r[1]:"19:00", 30)}</select></td></tr>`; }).join("")}</table>
       <label class="f" style="margin-top:10px;max-width:260px">Duración habitual de un turno<select id="cdur">${[15,20,30,40,45,60].map(m=>`<option value="${m}" ${Number(cfg.duracion)===m?"selected":""}>${m} minutos</option>`).join("")}</select></label></div>
     <div class="card"><h2>Mensaje de WhatsApp</h2><p class="muted" style="margin-top:0">Se puede usar {nombre}, {dia}, {fecha}, {hora}, {motivo}, {modalidad} (presencial / virtual) y {enlace} (el link si es virtual); se reemplazan solos.</p><textarea id="cmsg" rows="4">${esc(msg)}</textarea></div>
     <div class="row"><button class="btn pri right">Guardar configuración</button></div></form>
