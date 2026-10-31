@@ -147,13 +147,37 @@ td.num,th.num{text-align:right}
   #print.print-rollo .etq{break-after:page}
   #print .etq{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
+/* informes */
+.sem{display:inline-block;width:11px;height:11px;border-radius:50%;vertical-align:-1px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+#print.print-doc{--ink:#1a1a1a;--ink2:#555;--line:#d9d9d9;--surface:#fff;--surface2:#f2f2f2;--accent:#5B2A4C;--ok-soft:#E3F2EA;color:#1a1a1a;font:10pt/1.35 var(--body);background:#fff}
+.inf-head{display:flex;align-items:center;gap:14px;border-bottom:2px solid #5B2A4C;padding-bottom:8px;margin-bottom:8px}
+.inf-head img{width:62px;height:62px;object-fit:contain}
+.inf-marca{font-family:var(--display);font-size:17pt;color:#5B2A4C;line-height:1}
+.inf-mut{color:#666;font-size:9pt}
+.inf-tit{margin-left:auto;text-align:right}.inf-h{font-family:var(--display);font-size:14pt}
+.inf-pac{display:flex;flex-wrap:wrap;gap:6px 22px;background:#f6f1f4;border-radius:6px;padding:7px 10px;margin-bottom:10px}
+.inf-pac div{display:flex;flex-direction:column}.inf-pac span{font-size:8pt;color:#666;text-transform:uppercase;letter-spacing:.05em}
+.inf-tab{width:100%;border-collapse:collapse;font-size:9.5pt}
+.inf-tab th{font-size:8pt;text-transform:uppercase;color:#666;border-bottom:1px solid #bbb;padding:4px 6px;text-align:left}
+.inf-tab td{padding:3.5px 6px;border-bottom:1px solid #e6e6e6}
+.inf-tab .num{text-align:right}.inf-tab tr{break-inside:avoid}
+.inf-grp td{background:#f2ecf0;font-weight:700;color:#5B2A4C;font-size:9pt;padding-top:5px}
+.inf-est{white-space:nowrap}
+.inf-ley{margin-top:12px;border-top:1px solid #ccc;padding-top:6px;font-size:8.5pt;color:#444;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+.inf-firma{margin-left:auto;font-weight:600;color:#5B2A4C}
+.inf-evo{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.inf-ev{border:1px solid #ddd;border-radius:6px;padding:7px 9px;break-inside:avoid}
+.inf-ev-h{display:flex;justify-content:space-between}.inf-ev-h span,.inf-ev-r{color:#666;font-size:8.5pt}
+.inf-ev svg{width:100%;height:auto;max-height:38mm;display:block;margin:3px 0}
+.inf-ev-t{width:100%;border-collapse:collapse;font-size:8.5pt}.inf-ev-t td{padding:1.5px 3px;border-top:1px solid #eee}.inf-ev-t .num{text-align:right}
+@media print{ #print.print-doc{display:block!important} }
 .login .logo{display:block;width:120px;height:120px;margin:0 auto 8px}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31c";
+const APP_VERSION = "2026-10-31d";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -458,14 +482,52 @@ async function modalVisita(p, visita=null){
   };
 }
 
+/* ---------- INFORMES IMPRESOS (laboratorio y evolución) ---------- */
+const DRA = "Dra. Analía Jakowluk";
+const semaforo = e => ({"Óptimo":"#2E8B57","Normal":"#2E8B57","Fuera del óptimo":"#E8B000","Alto":"#C62828","Bajo":"#C62828"}[e] || "#9E9E9E");
+const semaforoTxt = e => ({"Óptimo":"Óptimo","Normal":"Dentro de referencia","Fuera del óptimo":"Precaución","Alto":"Alto · fuera de rango","Bajo":"Bajo · fuera de rango"}[e] || "Sin rango cargado");
+const punto = e => `<span class="sem" style="background:${semaforo(e)}"></span>`;
+const rangoTxt = (a,b) => (a!=null||b!=null) ? `${a!=null?num(a):"…"} – ${b!=null?num(b):"…"}` : "—";
+function cabeceraInforme(p, titulo, sub){
+  return `<header class="inf-head"><img src="logo.png" alt=""><div class="inf-dra"><div class="inf-marca">Eternal Secret</div><div><b>${DRA}</b></div><div class="inf-mut">Medicina funcional y estética</div></div>
+    <div class="inf-tit"><div class="inf-h">${esc(titulo)}</div><div class="inf-mut">${esc(sub||"")}</div></div></header>
+    <section class="inf-pac"><div><span>Paciente</span><b>${esc(p.nombre)}</b></div>${p.dni?`<div><span>DNI</span><b>${esc(p.dni)}</b></div>`:""}${p.edad!=null?`<div><span>Edad</span><b>${p.edad} años</b></div>`:""}${p.sexo?`<div><span>Sexo</span><b>${esc(p.sexo)}</b></div>`:""}${p.obra_social?`<div><span>Obra social</span><b>${esc(p.obra_social)}</b></div>`:""}</section>`;
+}
+const leyendaInforme = () => `<footer class="inf-ley">${punto("Óptimo")} Aceptable ${punto("Fuera del óptimo")} Precaución (dentro de referencia, fuera del óptimo) ${punto("Alto")} Fuera de rango ${punto("")} Sin rango cargado<div class="inf-firma">${DRA}</div></footer>`;
+function imprimirHTML(html, clase, pageCss){
+  let zona = document.getElementById("print"); if(!zona){ zona = document.createElement("div"); zona.id = "print"; document.body.appendChild(zona); }
+  zona.className = clase; zona.innerHTML = html;
+  let st = document.getElementById("pagestyle"); if(!st){ st = document.createElement("style"); st.id = "pagestyle"; document.head.appendChild(st); }
+  st.textContent = pageCss;
+  const imgs = [...zona.querySelectorAll("img")];
+  Promise.all(imgs.map(i => i.complete ? 1 : new Promise(r => { i.onload = i.onerror = r; }))).then(() => {
+    document.body.classList.add("printing"); setTimeout(() => { window.print(); setTimeout(()=>document.body.classList.remove("printing"), 500); }, 80);
+  });
+}
+function imprimirLaboratorio(p, f, rs){
+  const grupos = [...new Set(rs.map(r=>r.grupo))];
+  const html = cabeceraInforme(p, "Informe de laboratorio", "Análisis del " + fecha(f)) +
+    `<table class="inf-tab"><thead><tr><th>Determinación</th><th class="num">Resultado</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Estado</th></tr></thead>${grupos.map(g=>`<tbody><tr class="inf-grp"><td colspan="6">${esc(g)}</td></tr>${rs.filter(r=>r.grupo===g).map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${num(r.valor)}</b></td><td>${esc(r.unidad||"")}</td><td>${rangoTxt(r.rmin,r.rmax)}</td><td>${rangoTxt(r.omin,r.omax)}</td><td class="inf-est">${punto(r.estado)} ${semaforoTxt(r.estado)}</td></tr>`).join("")}</tbody>`).join("")}</table>` + leyendaInforme();
+  imprimirHTML(html, "print-doc", "@page{size:A4;margin:12mm 13mm}");
+}
+function imprimirEvolucion(p, porDet){
+  const fechas = [...new Set(porDet.flat().map(r=>r.fecha))].sort();
+  const html = cabeceraInforme(p, "Evolución de laboratorio", fechas.length ? `${fechas.length} análisis · ${fecha(fechas[0])} al ${fecha(fechas.at(-1))}` : "") +
+    `<div class="inf-evo">${porDet.map(rs=>{ const u=rs.at(-1); return `<div class="inf-ev"><div class="inf-ev-h"><b>${esc(u.determinacion)}</b><span>${esc(u.unidad||"")}</span></div>
+      <div class="inf-ev-r">Ref. ${rangoTxt(u.rmin,u.rmax)} · Óptimo ${rangoTxt(u.omin,u.omax)}</div>${grafico(rs)}
+      <table class="inf-ev-t">${rs.map(r=>`<tr><td>${fecha(r.fecha)}</td><td class="num"><b>${num(r.valor)}</b></td><td>${punto(r.estado)} ${semaforoTxt(r.estado)}</td></tr>`).join("")}</table></div>`; }).join("")}</div>` + leyendaInforme();
+  imprimirHTML(html, "print-doc", "@page{size:A4;margin:12mm 13mm}");
+}
+
 /* ---------- LABORATORIOS ---------- */
 async function tabLabs(c, p){
   const { data } = await sb.from("v_resultados").select("*").eq("paciente_id", p.id).order("fecha",{ascending:false}).order("orden");
   const fechas = [...new Set(data.map(r=>r.fecha))];
   c.innerHTML = `<div class="row" style="margin-bottom:10px"><span class="muted">${fechas.length} análisis cargados</span><button class="btn pri right" id="bnl">+ Cargar laboratorio</button></div>
-    ${fechas.length?fechas.map(f=>{ const rs=data.filter(r=>r.fecha===f); return `<div class="card tight" style="margin-bottom:12px"><div class="row" style="padding:12px 16px"><h2 style="margin:0">${fecha(f)}</h2><span class="muted">${rs.length} valores</span><button class="btn ghost right" data-f="${f}">Editar</button></div><div class="tablewrap"><table><thead><tr><th>Determinación</th><th class="num">Valor</th><th>Unidad</th><th>Rango</th><th>Estado</th></tr></thead><tbody>${rs.map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${num(r.valor)}</b></td><td class="muted">${esc(r.unidad)}</td><td class="muted">${rango(r)}</td><td><span class="pill ${estadoClase(r.estado)}">${esc(r.estado)}</span></td></tr>`).join("")}</tbody></table></div></div>`; }).join(""):`<div class="card empty">Todavía no hay laboratorios cargados para ${esc(p.nombre)}.</div>`}`;
+    ${fechas.length?fechas.map(f=>{ const rs=data.filter(r=>r.fecha===f); return `<div class="card tight" style="margin-bottom:12px"><div class="row" style="padding:12px 16px"><h2 style="margin:0">${fecha(f)}</h2><span class="muted">${rs.length} valores</span><button class="btn ghost right" data-pf="${f}">Imprimir</button><button class="btn ghost" data-f="${f}">Editar</button></div><div class="tablewrap"><table><thead><tr><th>Determinación</th><th class="num">Valor</th><th>Unidad</th><th>Rango</th><th>Estado</th></tr></thead><tbody>${rs.map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${num(r.valor)}</b></td><td class="muted">${esc(r.unidad)}</td><td class="muted">${rango(r)}</td><td><span class="pill ${estadoClase(r.estado)}">${esc(r.estado)}</span></td></tr>`).join("")}</tbody></table></div></div>`; }).join(""):`<div class="card empty">Todavía no hay laboratorios cargados para ${esc(p.nombre)}.</div>`}`;
   $("#bnl").onclick = () => modalLab(p);
   c.querySelectorAll("[data-f]").forEach(b => b.onclick = () => modalLab(p, b.dataset.f, data.filter(r=>r.fecha===b.dataset.f)));
+  c.querySelectorAll("[data-pf]").forEach(b => b.onclick = () => imprimirLaboratorio(p, b.dataset.pf, data.filter(r=>r.fecha===b.dataset.pf)));
 }
 function rango(r){
   const ref = (r.rmin!=null||r.rmax!=null) ? `${r.rmin??"…"}–${r.rmax??"…"}` : "";
@@ -504,7 +566,8 @@ async function tabEvolucion(c, p){
   if(!data.length){ c.innerHTML = `<div class="card empty">Cuando haya laboratorios cargados, acá vas a ver cómo evolucionó cada valor.</div>`; return; }
   const porDet = {}; data.forEach(r => (porDet[r.determinacion] ??= []).push(r));
   const orden = Object.values(porDet).sort((a,b)=>a[0].orden-b[0].orden);
-  c.innerHTML = `<p class="muted">Cada gráfico muestra los valores de una determinación en el tiempo. La franja verde es el rango óptimo; las líneas punteadas, el rango de referencia.</p><div class="evo">${orden.map(rs=>`<div class="card"><div class="row" style="margin-bottom:6px"><b>${esc(rs[0].determinacion)}</b><span class="pill ${estadoClase(rs.at(-1).estado)} right">${esc(rs.at(-1).estado)}</span></div><div class="muted" style="font-size:13px;margin-bottom:6px">Último: <b style="color:var(--ink)">${num(rs.at(-1).valor)}</b> ${esc(rs[0].unidad||"")} · ${fecha(rs.at(-1).fecha)}</div>${grafico(rs)}</div>`).join("")}</div>`;
+  c.innerHTML = `<div class="row" style="margin-bottom:8px"><p class="muted" style="margin:0;flex:1">Cada gráfico muestra los valores de una determinación en el tiempo. La franja verde es el rango óptimo; las líneas punteadas, el rango de referencia.</p><button class="btn" id="bprevo">Imprimir evolución</button></div><div class="evo">${orden.map(rs=>`<div class="card"><div class="row" style="margin-bottom:6px"><b>${esc(rs[0].determinacion)}</b><span class="pill ${estadoClase(rs.at(-1).estado)} right">${esc(rs.at(-1).estado)}</span></div><div class="muted" style="font-size:13px;margin-bottom:6px">Último: <b style="color:var(--ink)">${num(rs.at(-1).valor)}</b> ${esc(rs[0].unidad||"")} · ${fecha(rs.at(-1).fecha)}</div>${grafico(rs)}</div>`).join("")}</div>`;
+  $("#bprevo").onclick = () => imprimirEvolucion(p, orden);
 }
 function grafico(rs){
   const W=260,H=120,L=34,R=10,T=10,B=22;
