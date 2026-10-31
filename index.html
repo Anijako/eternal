@@ -138,14 +138,23 @@ td.num,th.num{text-align:right}
 .etq-rollo{width:50mm;height:30mm;padding:2mm 2.2mm}
 .etq-rollo img{width:15mm;height:15mm}.etq-rollo .etq-n{font-size:8pt}.etq-rollo .etq-l{font-size:7.5pt;margin-top:.6mm}.etq-rollo .etq-c{font-size:10.5pt}.etq-rollo .etq-v{font-size:6.5pt}
 #print{display:none}
+#prbar{display:none}
+body.preview{overflow:hidden}
+body.preview #prbar{display:flex;position:fixed;top:0;left:0;right:0;z-index:101;gap:10px;align-items:center;padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 10px;background:#5B2A4C;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+body.preview #prbar .btn{background:#fff;color:#5B2A4C;border-color:#fff}
+body.preview #prbar .btn.sec{background:transparent;color:#fff;border-color:rgba(255,255,255,.6)}
+body.preview #print{display:block;position:fixed;inset:0;z-index:100;overflow:auto;-webkit-overflow-scrolling:touch;background:#fff;color:#1a1a1a;padding:calc(env(safe-area-inset-top,0px) + 76px) 20px 30px}
+body.preview #print.print-a4{display:grid;grid-template-columns:repeat(3,63.5mm);column-gap:2.5mm;grid-auto-rows:38.1mm;align-content:start}
+body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-content:start}
 @media print{
-  body.printing{background:#fff}
-  body.printing > *:not(#print){display:none!important}
-  body.printing #print{display:block}
-  #print.print-a4{display:grid!important;grid-template-columns:repeat(3,63.5mm);column-gap:2.5mm;grid-auto-rows:38.1mm}
+  body.preview{background:#fff;overflow:visible}
+  body.preview > *:not(#print){display:none!important}
+  body.preview #print{position:static;overflow:visible;padding:0;inset:auto}
+  body.preview #print.print-a4{display:grid!important}
+  body.preview #print.print-rollo{display:block!important}
   #print.print-a4 .etq:nth-child(21n){break-after:page}
   #print.print-rollo .etq{break-after:page}
-  #print .etq{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #print .etq,#print .sem{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 /* informes */
 .sem{display:inline-block;width:11px;height:11px;border-radius:50%;vertical-align:-1px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -184,14 +193,14 @@ td.num,th.num{text-align:right}
 .inf-ev-h{display:flex;justify-content:space-between}.inf-ev-h span,.inf-ev-r{color:#666;font-size:8.5pt}
 .inf-ev svg{width:100%;height:auto;max-height:38mm;display:block;margin:3px 0}
 .inf-ev-t{width:100%;border-collapse:collapse;font-size:8.5pt}.inf-ev-t td{padding:1.5px 3px;border-top:1px solid #eee}.inf-ev-t .num{text-align:right}
-@media print{ #print.print-doc{display:block!important} }
+
 .login .logo{display:block;width:120px;height:120px;margin:0 auto 8px}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31k";
+const APP_VERSION = "2026-10-31l";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -515,14 +524,18 @@ function cabeceraInforme(p, titulo, sub){
 }
 const leyendaInforme = () => `<footer class="inf-ley">${punto("Óptimo")} Aceptable ${punto("Fuera del óptimo")} Precaución (dentro de referencia, fuera del óptimo) ${punto("Alto")} Fuera de rango ${punto("")} Sin rango cargado<div class="inf-firma">${DRA}</div></footer>`;
 function imprimirHTML(html, clase, pageCss){
+  // Muestra una vista previa con botón "Imprimir": Safari solo deja imprimir si se toca un botón directamente.
   let zona = document.getElementById("print"); if(!zona){ zona = document.createElement("div"); zona.id = "print"; document.body.appendChild(zona); }
-  zona.className = clase; zona.innerHTML = html;
+  zona.className = clase; zona.innerHTML = html; zona.scrollTop = 0;
   let st = document.getElementById("pagestyle"); if(!st){ st = document.createElement("style"); st.id = "pagestyle"; document.head.appendChild(st); }
   st.textContent = pageCss;
-  const imgs = [...zona.querySelectorAll("img")];
-  Promise.all(imgs.map(i => i.complete ? 1 : new Promise(r => { i.onload = i.onerror = r; }))).then(() => {
-    document.body.classList.add("printing"); setTimeout(() => { window.print(); setTimeout(()=>document.body.classList.remove("printing"), 500); }, 80);
-  });
+  let bar = document.getElementById("prbar");
+  if(!bar){ bar = document.createElement("div"); bar.id = "prbar";
+    bar.innerHTML = `<button class="btn sec" id="prcerrar">← Volver</button><span style="flex:1;font-weight:600">Vista previa</span><button class="btn" id="prok">Imprimir</button>`;
+    document.body.appendChild(bar);
+    $("#prok").onclick = () => window.print();
+    $("#prcerrar").onclick = () => document.body.classList.remove("preview"); }
+  document.body.classList.add("preview");
 }
 async function imprimirPlanilla(dets){
   const { data: esp } = await sb.from("rangos_especiales").select("*");
@@ -835,15 +848,9 @@ function etiquetaHTML(u){
   return `<img src="logo.png" alt=""><div class="etq-t"><div class="etq-n">${esc(u.producto)}</div><div class="etq-l">Lote <b>${esc(u.lote)}</b></div><div class="etq-c">${esc(u.codigo_corto)}</div>${u.vencimiento?`<div class="etq-v">Vto. ${mmaa(u.vencimiento)}</div>`:""}</div>`;
 }
 function imprimirEtiquetas(lista, formato, saltear){
-  let zona = document.getElementById("print"); if(!zona){ zona = document.createElement("div"); zona.id = "print"; document.body.appendChild(zona); }
-  zona.className = "print-" + formato;
-  zona.innerHTML = Array(saltear).fill(`<div class="etq etq-${formato}"></div>`).join("") + lista.map(u=>`<div class="etq etq-${formato}">${etiquetaHTML(u)}</div>`).join("");
-  let st = document.getElementById("pagestyle"); if(!st){ st = document.createElement("style"); st.id = "pagestyle"; document.head.appendChild(st); }
-  st.textContent = formato==="a4" ? "@page{size:A4;margin:15.1mm 7.2mm}" : "@page{size:50mm 30mm;margin:0}";
-  const imgs = [...zona.querySelectorAll("img")];
-  Promise.all(imgs.map(i => i.complete ? 1 : new Promise(r => { i.onload = i.onerror = r; }))).then(() => {
-    document.body.classList.add("printing"); setTimeout(() => { window.print(); setTimeout(()=>document.body.classList.remove("printing"), 500); }, 50);
-  });
+  cerrarModal();
+  const html = Array(saltear).fill(`<div class="etq etq-${formato}"></div>`).join("") + lista.map(u=>`<div class="etq etq-${formato}">${etiquetaHTML(u)}</div>`).join("");
+  imprimirHTML(html, "print-" + formato, formato==="a4" ? "@page{size:A4;margin:15.1mm 7.2mm}" : "@page{size:50mm 30mm;margin:0}");
 }
 
 /* Entrega de productos a un paciente: código 000097-02 = producto 000097, 2 unidades (lotes más antiguos primero) */
