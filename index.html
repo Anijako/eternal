@@ -211,7 +211,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31t";
+const APP_VERSION = "2026-10-31u";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -365,16 +365,19 @@ function telWhatsApp(tel){
   if(d.length === 12){ for(const p of [2,3,4]) if(d.slice(p,p+2)==="15"){ d = d.slice(0,p)+d.slice(p+2); break; } }
   return d.length >= 8 ? "549" + d : null;
 }
+const linkTurno = t => new URL("turno.html", location.href.split("#")[0]).href.split("?")[0] + "?id=" + t.id;
 async function mensajeTurno(t){
   const plantilla = await leerConfig("mensaje_turno", "Hola {nombre}! Te confirmo tu turno con la Dra. Analía Jakowluk el {dia} {fecha} a las {hora} hs.");
   const d = dDe(t.fecha);
   const nombre = (t.paciente||"").split(" ").slice(1).join(" ") || t.paciente || "";
   return plantilla.replaceAll("{nombre}", nombre).replaceAll("{paciente}", t.paciente||"").replaceAll("{dia}", DIAS[d.getDay()].toLowerCase())
     .replaceAll("{fecha}", `${d.getDate()}/${String(d.getMonth()+1).padStart(2,"0")}`).replaceAll("{hora}", t.hora.slice(0,5)).replaceAll("{motivo}", t.motivo||"")
+    .replaceAll("{calendario}", t.id ? linkTurno(t) : "")
     .replaceAll("{modalidad}", (t.modalidad||"Presencial").toLowerCase())
     .replaceAll("{enlace}", t.modalidad==="Virtual" && t.enlace ? ` Ingresá desde este enlace: ${t.enlace}.` : "")
     + (!plantilla.includes("{modalidad}") ? ` Modalidad: ${(t.modalidad||"Presencial").toLowerCase()}.` : "")
-    + (!plantilla.includes("{enlace}") && t.modalidad==="Virtual" && t.enlace ? ` Enlace: ${t.enlace}` : "");
+    + (!plantilla.includes("{enlace}") && t.modalidad==="Virtual" && t.enlace ? ` Enlace: ${t.enlace}` : "")
+    + (!plantilla.includes("{calendario}") && t.id ? ` Agregalo a tu calendario (con recordatorio 1 hora antes): ${linkTurno(t)}` : "");
 }
 async function enviarWhatsApp(t){
   let tel = telWhatsApp(t.telefono);
@@ -500,12 +503,13 @@ async function modalTurno(t){
 
 /* Configuración de la agenda (en Catálogos) */
 async function pintaAgendaCfg(c){
-  const cfg = await configAgenda(); const msg = await leerConfig("mensaje_turno", ""); const token = await leerConfig("calendario_token", "");
+  const cfg = await configAgenda(); const msg = await leerConfig("mensaje_turno", ""); const token = await leerConfig("calendario_token", ""); const dir = await leerConfig("direccion_consultorio", "");
   const url = `${SUPABASE_URL}/functions/v1/agenda-ics?token=${token}`;
   c.innerHTML = `<form id="fcfg" class="grid">
     <div class="card"><h2>Horario de atención</h2><table>${[1,2,3,4,5,6,0].map(w=>{ const r=cfg.dias?.[String(w)]; return `<tr><td style="width:140px"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-w="${w}" ${r?"checked":""} style="width:auto;min-height:0"> ${DIAS[w]}</label></td><td><select data-wd="${w}" style="width:auto">${opcionesHora(r?r[0]:"09:00", 30)}</select></td><td>a</td><td><select data-wh="${w}" style="width:auto">${opcionesHora(r?r[1]:"19:00", 30)}</select></td></tr>`; }).join("")}</table>
       <label class="f" style="margin-top:10px;max-width:260px">Duración habitual de un turno<select id="cdur">${[15,20,30,40,45,60].map(m=>`<option value="${m}" ${Number(cfg.duracion)===m?"selected":""}>${m} minutos</option>`).join("")}</select></label></div>
-    <div class="card"><h2>Mensaje de WhatsApp</h2><p class="muted" style="margin-top:0">Se puede usar {nombre}, {dia}, {fecha}, {hora}, {motivo}, {modalidad} (presencial / virtual) y {enlace} (el link si es virtual); se reemplazan solos.</p><textarea id="cmsg" rows="4">${esc(msg)}</textarea></div>
+    <div class="card"><h2>Mensaje de WhatsApp</h2><p class="muted" style="margin-top:0">Se puede usar {nombre}, {dia}, {fecha}, {hora}, {motivo}, {modalidad} (presencial / virtual), {enlace} (el link si es virtual) y {calendario} (link para que el paciente agregue el turno a su calendario, con aviso 1 hora antes); se reemplazan solos.</p><textarea id="cmsg" rows="4">${esc(msg)}</textarea>
+      <label class="f" style="margin-top:10px">Dirección del consultorio (aparece en el calendario del paciente)<input id="cdir" value="${esc(dir)}" placeholder="ej. Av. Siempreviva 742, Banfield"></label></div>
     <div class="row"><button class="btn pri right">Guardar configuración</button></div></form>
     <div class="card" style="margin-top:14px"><h2>Ver los turnos en el calendario del iPad / iPhone</h2>
       <p>Suscribí el calendario una sola vez y los turnos que cargues aparecen solos en el calendario del dispositivo (se actualiza cada 15–60 minutos).</p>
@@ -519,6 +523,7 @@ async function pintaAgendaCfg(c){
     const dias = {}; for(const ch of c.querySelectorAll("[data-w]")){ if(!ch.checked) continue; const w=ch.dataset.w, a=c.querySelector(`[data-wd="${w}"]`).value, b=c.querySelector(`[data-wh="${w}"]`).value; if(!a||!b||a>=b) return toast(`Revisá el horario del ${DIAS[w].toLowerCase()}.`); dias[w]=[a,b]; }
     const r1 = await sb.from("config").upsert({ clave:"agenda", valor:{ duracion:Number($("#cdur").value), dias } }); if(r1.error) return fail(r1.error);
     const r2 = await sb.from("config").upsert({ clave:"mensaje_turno", valor:$("#cmsg").value.trim() }); if(r2.error) return fail(r2.error);
+    const r3 = await sb.from("config").upsert({ clave:"direccion_consultorio", valor:$("#cdir").value.trim() || "Eternal Secret" }); if(r3.error) return fail(r3.error);
     toast("Configuración guardada"); };
 }
 

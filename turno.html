@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tu turno · Eternal Secret</title>
+<meta name="description" content="Agregá tu turno con la Dra. Analía Jakowluk a tu calendario, con recordatorio 1 hora antes.">
+<meta property="og:title" content="Tu turno en Eternal Secret">
+<meta property="og:description" content="Agregalo a tu calendario con recordatorio 1 hora antes.">
+<meta property="og:image" content="https://anijako.github.io/eternal/logo.png">
+<meta name="theme-color" content="#5B2A4C">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F6F3F5;--card:#fff;--ink:#241A21;--ink2:#6B5A65;--accent:#5B2A4C;--line:#E2D8DE}
+@media (prefers-color-scheme: dark){:root{--bg:#17121A;--card:#211A24;--ink:#F2EAF0;--ink2:#B7A6B2;--accent:#D9A6C8;--line:#3A3040}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 "Figtree",-apple-system,sans-serif;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:max(24px,env(safe-area-inset-top)) 16px 32px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:24px 20px;max-width:440px;width:100%;text-align:center}
+img{width:120px;height:120px;object-fit:contain}
+h1{font-family:"Newsreader",Georgia,serif;font-weight:600;font-size:28px;margin:8px 0 2px}
+.dra{color:var(--ink2);margin:0 0 18px}
+.cuando{font-size:22px;font-weight:700;margin:4px 0}
+.donde{color:var(--ink2);margin:0 0 20px;word-break:break-word}
+.btn{display:block;text-decoration:none;font-weight:600;border-radius:14px;padding:15px 16px;margin:10px 0;border:1px solid var(--accent)}
+.pri{background:var(--accent);color:#fff}
+@media (prefers-color-scheme: dark){.pri{color:#2A1224}}
+.sec{color:var(--accent);background:transparent}
+.nota{color:var(--ink2);font-size:14px;margin-top:16px}
+.canc{color:#B3261E;font-weight:700}
+</style>
+</head>
+<body>
+<main class="card">
+  <img src="logo.png" alt="Eternal Secret">
+  <h1>Tu turno</h1>
+  <p class="dra">Dra. Analía Jakowluk · Medicina funcional y estética</p>
+  <div id="c"><p>Cargando…</p></div>
+</main>
+<script>
+const FN = "https://fqkimypjlxdsytcvoyal.supabase.co/functions/v1/turno-publico";
+const DIAS = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const id = new URLSearchParams(location.search).get("id") || "";
+const c = document.getElementById("c");
+fetch(`${FN}?id=${encodeURIComponent(id)}&format=json`).then(r => r.ok ? r.json() : Promise.reject()).then(t => {
+  const [y,m,d] = t.fecha.split("-").map(Number); const f = new Date(y, m-1, d);
+  const cuando = `${DIAS[f.getDay()]} ${d} de ${MESES[m-1]} · ${t.hora} hs`;
+  const virtual = t.modalidad === "Virtual";
+  const google = "https://calendar.google.com/calendar/render?action=TEMPLATE"
+    + "&text=" + encodeURIComponent(t.titulo) + "&dates=" + t.inicio_utc + "/" + t.fin_utc
+    + "&location=" + encodeURIComponent(t.lugar) + "&details=" + encodeURIComponent("Turno " + (virtual ? "virtual" : "presencial") + " con la Dra. Analía Jakowluk." + (t.enlace ? "\nEnlace: " + t.enlace : ""));
+  if(t.estado === "Cancelado"){ c.innerHTML = `<p class="cuando">${esc(cuando)}</p><p class="canc">Este turno fue cancelado.</p>`; return; }
+  c.innerHTML = `<p class="cuando">${esc(cuando.charAt(0).toUpperCase()+cuando.slice(1))}</p>
+    <p class="donde">${virtual ? "Turno virtual" + (t.enlace ? ` · <a href="${esc(t.enlace)}">entrar a la videollamada</a>` : "") : "Presencial · " + esc(t.lugar)}</p>
+    <a class="btn pri" href="${FN}?id=${encodeURIComponent(id)}">Agregar a mi calendario<br><small style="font-weight:500">iPhone · iPad · Mac · Outlook — con aviso 1 hora antes</small></a>
+    <a class="btn sec" href="${google}" target="_blank" rel="noopener">Agregar a Google Calendar<br><small style="font-weight:500">Android</small></a>
+    <p class="nota">En Google Calendar el aviso usa la configuración de tu calendario. Ante cualquier cambio, avisá por WhatsApp.</p>`;
+}).catch(() => { c.innerHTML = `<p>No encontramos este turno. Consultá por WhatsApp.</p>`; });
+</script>
+</body>
+</html>

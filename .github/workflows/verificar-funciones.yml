@@ -1,0 +1,21 @@
+name: Verificar funciones
+on:
+  push:
+    paths: [".github/workflows/verificar-funciones.yml"]
+  workflow_dispatch:
+jobs:
+  probar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Turno público (id inexistente debe dar 404, con CORS)
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" "https://fqkimypjlxdsytcvoyal.supabase.co/functions/v1/turno-publico?id=00000000-0000-0000-0000-000000000000&format=json")
+          echo "HTTP $code"; test "$code" = "404"
+      - name: Calendario sin token debe dar 401
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" "https://fqkimypjlxdsytcvoyal.supabase.co/functions/v1/agenda-ics?token=x")
+          echo "HTTP $code"; test "$code" = "401"
+      - name: Página del turno publicada
+        run: |
+          sleep 60
+          curl -fsS https://anijako.github.io/eternal/turno.html | grep -q "turno-publico"
