@@ -126,6 +126,17 @@ td.num,th.num{text-align:right}
 .bar span{display:block;height:100%;background:var(--accent)}
 .right{margin-left:auto}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+/* agenda */
+.ag{display:grid;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface);margin-bottom:8px}
+.ag-h{position:sticky;top:0;background:var(--surface2);font-weight:700;text-align:center;padding:8px 4px;border-bottom:1px solid var(--line);grid-row:1;font-size:14px}
+.ag-h.hoy{background:var(--accent-soft);color:var(--accent)}
+.ag-t{grid-column:1;font-size:11px;color:var(--ink2);text-align:right;padding:0 6px;transform:translateY(-7px)}
+.ag-c{appearance:none;border:none;border-left:1px solid var(--line);border-top:1px dashed transparent;background:transparent;cursor:pointer;min-height:28px;padding:0}
+.ag-c.hr{border-top:1px solid var(--line)}
+.ag-c:hover{background:var(--accent-soft)}
+.ag-c.cerrado{background:repeating-linear-gradient(45deg,var(--surface2),var(--surface2) 4px,transparent 4px,transparent 8px)}
+.ag-t1{appearance:none;border:none;margin:1px 3px;border-radius:7px;padding:3px 6px;text-align:left;font-size:12.5px;line-height:1.25;overflow:hidden;cursor:pointer;z-index:1;border-left:3px solid currentColor}
+.ag-t1 span{opacity:.8}.ag-t1.canc{text-decoration:line-through;opacity:.6}
 /* etiquetas */
 .etq{display:flex;align-items:center;gap:2.2mm;overflow:hidden;color:#111;font-family:var(--body);box-sizing:border-box}
 .etq img{flex:none;object-fit:contain}
@@ -200,7 +211,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31o";
+const APP_VERSION = "2026-10-31p";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -227,6 +238,7 @@ const alertaClase = a => ({"Sin stock":"s-bad","Vencido":"s-bad","Vence en menos
 function toast(msg){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); }
 function fail(e){ console.error(e); toast("No se pudo guardar: " + (e?.message||e)); }
 const ICON = {
+  cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
   home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>',
   pac:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>',
   stock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>',
@@ -293,7 +305,7 @@ async function pantallaNuevaClave(){
 }
 
 /* ---------- estructura ---------- */
-const NAV = [["#/","Inicio","home"],["#/pacientes","Pacientes","pac"],["#/stock","Stock","stock"],["#/facturacion","Facturación","fact"],["#/ajustes","Catálogos","conf"]];
+const NAV = [["#/","Inicio","home"],["#/agenda","Agenda","cal"],["#/pacientes","Pacientes","pac"],["#/stock","Stock","stock"],["#/facturacion","Facturación","fact"],["#/ajustes","Catálogos","conf"]];
 function shell(){
   const nav = (cls) => NAV.map(([h,t,i]) => `<a class="navbtn" data-h="${h}" href="${h}">${ICON[i]}<span>${t}</span>${i==="stock"&&alertasStock?`<span class="dot">${alertasStock}</span>`:""}</a>`).join("");
   $("#root").innerHTML = `<div class="app">
@@ -319,6 +331,7 @@ async function render(){
     if(h==="#/"||h==="") await vInicio(v);
     else if(h==="#/pacientes") await vPacientes(v);
     else if((m=h.match(/^#\/p\/([\w-]+)(?:\/(\w+))?/))) await vPaciente(v, m[1], m[2]||"visitas");
+    else if((m=h.match(/^#\/agenda(?:\/(\d{4}-\d{2}-\d{2}))?$/))) await vAgenda(v, m[1]);
     else if(h==="#/stock") await vStock(v);
     else if(h==="#/facturacion") await vFacturacion(v);
     else if(h==="#/ajustes") await vAjustes(v);
@@ -327,13 +340,198 @@ async function render(){
 }
 window.addEventListener("hashchange", render);
 
+/* ---------- AGENDA DE TURNOS ---------- */
+const DIAS = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+const DIAS_C = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+const ESTADOS_T = ["Reservado","Confirmado","Atendido","Ausente","Cancelado"];
+const estadoTurnoClase = e => ({"Reservado":"s-info","Confirmado":"s-ok","Atendido":"s-none","Ausente":"s-bad","Cancelado":"s-none"}[e]||"s-none");
+const isoDe = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const dDe = iso => { const [y,m,d] = iso.split("-").map(Number); return new Date(y, m-1, d); };
+const masDias = (iso, n) => { const d = dDe(iso); d.setDate(d.getDate()+n); return isoDe(d); };
+const lunesDe = iso => { const d = dDe(iso); const w = (d.getDay()+6)%7; d.setDate(d.getDate()-w); return isoDe(d); };
+const minDe = h => { const [a,b] = h.slice(0,5).split(":").map(Number); return a*60+b; };
+const hDe = m => String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+const fechaLarga = iso => { const d = dDe(iso); return `${DIAS[d.getDay()]} ${d.getDate()}/${String(d.getMonth()+1).padStart(2,"0")}`; };
+async function leerConfig(clave, def){ const { data } = await sb.from("config").select("valor").eq("clave", clave).maybeSingle(); return data ? data.valor : def; }
+async function configAgenda(){ return await leerConfig("agenda", { duracion:30, dias:{ "1":["09:00","19:00"],"2":["09:00","19:00"],"3":["09:00","19:00"],"4":["09:00","19:00"],"5":["09:00","19:00"] } }); }
+function telWhatsApp(tel){
+  let d = (tel||"").replace(/\D/g,""); if(!d) return null;
+  if(d.startsWith("00")) d = d.slice(2);
+  if(d.startsWith("54")){ d = d.slice(2); if(d.startsWith("9")) d = d.slice(1); }
+  if(d.startsWith("0")) d = d.slice(1);
+  if(d.length === 12){ for(const p of [2,3,4]) if(d.slice(p,p+2)==="15"){ d = d.slice(0,p)+d.slice(p+2); break; } }
+  return d.length >= 8 ? "549" + d : null;
+}
+async function mensajeTurno(t){
+  const plantilla = await leerConfig("mensaje_turno", "Hola {nombre}! Te confirmo tu turno con la Dra. Analía Jakowluk el {dia} {fecha} a las {hora} hs.");
+  const d = dDe(t.fecha);
+  const nombre = (t.paciente||"").split(" ").slice(1).join(" ") || t.paciente || "";
+  return plantilla.replaceAll("{nombre}", nombre).replaceAll("{paciente}", t.paciente||"").replaceAll("{dia}", DIAS[d.getDay()].toLowerCase())
+    .replaceAll("{fecha}", `${d.getDate()}/${String(d.getMonth()+1).padStart(2,"0")}`).replaceAll("{hora}", t.hora.slice(0,5)).replaceAll("{motivo}", t.motivo||"");
+}
+async function enviarWhatsApp(t){
+  let tel = telWhatsApp(t.telefono);
+  if(!tel){ const nuevo = prompt(`No hay celular cargado para ${t.paciente}. Escribilo (con característica, ej. 11 5555-1234):`); if(!nuevo) return;
+    tel = telWhatsApp(nuevo); if(!tel) return toast("Ese número no parece válido.");
+    await sb.from("pacientes").update({ telefono: nuevo }).eq("id", t.paciente_id); t.telefono = nuevo; }
+  const msg = await mensajeTurno(t);
+  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, "_blank");
+  await sb.from("turnos").update({ whatsapp_enviado: new Date().toISOString() }).eq("id", t.id);
+}
+function icsTurno(t){
+  const utc = (f,h,mas=0) => { const [y,m,d]=f.split("-").map(Number), [hh,mm]=h.slice(0,5).split(":").map(Number); return new Date(Date.UTC(y,m-1,d,hh+3,mm+mas)).toISOString().replace(/[-:]/g,"").replace(/\.\d{3}/,""); };
+  const e = s => (s||"").replace(/[\\;,]/g, m=>"\\"+m).replace(/\n/g,"\\n");
+  const txt = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Eternal Secret//Agenda//ES","BEGIN:VEVENT",`UID:${t.id}@eternal-secret`,`DTSTAMP:${utc(hoy(),"00:00")}`,
+    `DTSTART:${utc(t.fecha,t.hora)}`,`DTEND:${utc(t.fecha,t.hora,t.duracion)}`,`SUMMARY:${e(t.paciente+(t.motivo?" · "+t.motivo:""))}`,`DESCRIPTION:${e([t.area,t.telefono?"Tel: "+t.telefono:"",t.notas].filter(Boolean).join("\n"))}`,
+    "LOCATION:Eternal Secret","END:VEVENT","END:VCALENDAR"].join("\r\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt], { type:"text/calendar" })); a.download = `Turno ${t.paciente} ${t.fecha}.ics`; document.body.appendChild(a); a.click(); a.remove();
+}
+
+async function vAgenda(v, semana){
+  const cfg = await configAgenda();
+  const lun = lunesDe(semana || hoy()), dom = masDias(lun, 6);
+  const { data: ts, error } = await sb.from("v_turnos").select("*").gte("fecha", lun).lte("fecha", dom).order("fecha").order("hora"); if(error) throw error;
+  const dur = Number(cfg.duracion)||30;
+  const diasSemana = [0,1,2,3,4,5,6].map(i=>masDias(lun,i)).filter(f => { const wd = String(dDe(f).getDay()); return cfg.dias?.[wd] || ts.some(t=>t.fecha===f); });
+  const rangos = Object.values(cfg.dias||{}); const ini = Math.min(...rangos.map(r=>minDe(r[0])), ...ts.map(t=>minDe(t.hora)), 9*60), fin = Math.max(...rangos.map(r=>minDe(r[1])), ...ts.map(t=>minDe(t.hora)+t.duracion), 13*60);
+  const slots = []; for(let m = Math.floor(ini/dur)*dur; m < fin; m += dur) slots.push(m);
+  const titulo = `${dDe(lun).getDate()}/${String(dDe(lun).getMonth()+1).padStart(2,"0")} al ${dDe(dom).getDate()}/${String(dDe(dom).getMonth()+1).padStart(2,"0")}`;
+  const activos = ts.filter(t=>t.estado!=="Cancelado");
+  v.innerHTML = `<div class="row"><h1>Agenda</h1><span class="right"></span><button class="btn pri" id="bnt2">+ Nuevo turno</button></div>
+    <div class="row" style="margin:6px 0 14px"><a class="btn" href="#/agenda/${masDias(lun,-7)}">‹</a><b style="font-size:18px">Semana del ${titulo}</b><a class="btn" href="#/agenda/${masDias(lun,7)}">›</a>${lun!==lunesDe(hoy())?`<a class="btn ghost" href="#/agenda">Hoy</a>`:""}<span class="right muted">${activos.length} turnos</span></div>
+    <div id="agw"></div>`;
+  $("#bnt2").onclick = () => modalTurno({ fecha: lun <= hoy() && hoy() <= dom ? hoy() : lun });
+  const ancho = window.innerWidth > 820;
+  if(ancho){
+    const hoyIso = hoy();
+    let g = `<div class="ag" style="grid-template-columns:56px repeat(${diasSemana.length},1fr);grid-template-rows:auto repeat(${slots.length},28px)">`;
+    g += `<div class="ag-h"></div>` + diasSemana.map((f,i)=>`<div class="ag-h ${f===hoyIso?"hoy":""}" style="grid-column:${i+2}">${DIAS_C[dDe(f).getDay()]} ${dDe(f).getDate()}</div>`).join("");
+    slots.forEach((m,r)=>{ g += `<div class="ag-t" style="grid-row:${r+2}">${m%60===0||dur>=60?hDe(m):""}</div>`;
+      diasSemana.forEach((f,i)=>{ const h = cfg.dias?.[String(dDe(f).getDay())]; const abierto = h && m >= minDe(h[0]) && m < minDe(h[1]);
+        g += `<button class="ag-c ${abierto?"":"cerrado"} ${m%60===0?"hr":""}" style="grid-row:${r+2};grid-column:${i+2}" data-f="${f}" data-h="${hDe(m)}" aria-label="Nuevo turno ${fechaLarga(f)} ${hDe(m)}"></button>`; }); });
+    ts.forEach(t=>{ const i = diasSemana.indexOf(t.fecha); if(i<0) return; const r0 = Math.floor((minDe(t.hora)-slots[0])/dur);
+      const span = Math.max(1, Math.ceil(t.duracion/dur));
+      g += `<button class="ag-t1 ${estadoTurnoClase(t.estado)} ${t.estado==="Cancelado"?"canc":""}" style="grid-column:${i+2};grid-row:${r0+2} / span ${span}" data-t="${t.id}"><b>${t.hora.slice(0,5)}</b> ${esc(t.paciente)}${t.motivo?`<span> · ${esc(t.motivo)}</span>`:""}${t.whatsapp_enviado?" ✓":""}</button>`; });
+    $("#agw").innerHTML = g + `</div><p class="muted" style="font-size:13px">Tocá un horario libre para dar un turno. Las franjas grises están fuera del horario de atención (se configura en Catálogos → Agenda).</p>`;
+  } else {
+    $("#agw").innerHTML = [0,1,2,3,4,5,6].map(i=>masDias(lun,i)).filter(f=>diasSemana.includes(f)).map(f=>{ const del = ts.filter(t=>t.fecha===f);
+      return `<div class="card tight" style="margin-bottom:10px"><div class="row" style="padding:10px 14px"><b>${fechaLarga(f)}</b><button class="btn ghost right" data-nf="${f}">+ Turno</button></div>${del.length?`<ul class="list">${del.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left" data-t="${t.id}"><div class="main"><div class="t">${t.hora.slice(0,5)} · ${esc(t.paciente)}</div><div class="s">${esc(t.motivo||"")}${t.whatsapp_enviado?" · WhatsApp enviado":""}</div></div><span class="pill ${estadoTurnoClase(t.estado)}">${t.estado}</span></button></li>`).join("")}</ul>`:`<div class="empty" style="padding:12px">Sin turnos</div>`}</div>`; }).join("");
+  }
+  v.querySelectorAll(".ag-c").forEach(b=>b.onclick=()=>modalTurno({ fecha:b.dataset.f, hora:b.dataset.h }));
+  v.querySelectorAll("[data-nf]").forEach(b=>b.onclick=()=>modalTurno({ fecha:b.dataset.nf }));
+  v.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>modalTurno(ts.find(t=>t.id===b.dataset.t)));
+}
+
+async function modalTurno(t){
+  const cfg = await configAgenda();
+  const nuevo = !t.id; let pac = t.paciente_id ? { id:t.paciente_id, nombre:t.paciente, telefono:t.telefono } : (t.pac || null);
+  const dur = t.duracion || Number(cfg.duracion) || 30;
+  abrirModal(nuevo ? "Nuevo turno" : `Turno · ${t.paciente}`, `<form id="fturno" class="grid">
+    <div id="tpac"></div>
+    <div class="fields">
+      <label class="f">Fecha<input name="fecha" type="date" required value="${t.fecha||hoy()}"></label>
+      <label class="f">Hora<input name="hora" type="time" step="300" required value="${(t.hora||"").slice(0,5)}"></label>
+      <label class="f">Duración (min)<select name="duracion">${[15,20,30,40,45,60,75,90,120].map(m=>`<option ${m===dur?"selected":""}>${m}</option>`).join("")}</select></label>
+      <label class="f">Área<select name="area"><option value=""></option>${["Estética","Funcional","Funcional y Estética"].map(a=>`<option ${t.area===a?"selected":""}>${a}</option>`).join("")}</select></label>
+      <label class="f wide">Motivo / tratamiento<input name="motivo" value="${esc(t.motivo)}" placeholder="ej. Sueroterapia, Facial, Consulta"></label>
+      ${nuevo?"":`<label class="f">Estado<select name="estado">${ESTADOS_T.map(s=>`<option ${t.estado===s?"selected":""}>${s}</option>`).join("")}</select></label>`}
+      <label class="f wide">Notas<input name="notas" value="${esc(t.notas)}"></label>
+    </div>
+    <div id="taviso" style="color:var(--warn);font-weight:600"></div>
+    <div class="row">${nuevo?"":`<button type="button" class="btn danger" id="tdel">Eliminar</button>`}<button class="btn pri right" type="submit">${nuevo?"Guardar turno":"Guardar cambios"}</button></div>
+    ${nuevo?"":`<div class="card" style="background:var(--accent-soft);border-color:transparent"><div class="row">
+      <button type="button" class="btn pri" id="twa">Enviar por WhatsApp${t.whatsapp_enviado?" (ya enviado)":""}</button>
+      <button type="button" class="btn" id="tics">Agregar a mi calendario</button>
+      <button type="button" class="btn" id="tvis">Paciente atendido → cargar visita</button></div></div>`}
+  </form>`);
+  const pintaPac = () => {
+    if(pac){ $("#tpac").innerHTML = `<div class="row"><div><div class="muted" style="font-size:13px;font-weight:600">PACIENTE</div><b style="font-size:18px">${esc(pac.nombre)}</b>${pac.telefono?` <span class="muted">· ${esc(pac.telefono)}</span>`:""}</div><button type="button" class="btn ghost right" id="tcamb">Cambiar</button></div>`; $("#tcamb").onclick=()=>{ pac=null; pintaPac(); }; return; }
+    $("#tpac").innerHTML = `<label class="f">Paciente<div class="search">${ICON.search}<input id="tpq" placeholder="Buscar por apellido, nombre o DNI" autocomplete="off"></div></label><div id="tpr"></div>`;
+    let tm; $("#tpq").oninput = () => { clearTimeout(tm); tm=setTimeout(async()=>{ const q=$("#tpq").value.trim().replace(/[%,()]/g,""); if(q.length<2){ $("#tpr").innerHTML=""; return; }
+      const { data } = await sb.from("pacientes").select("id,nombre,dni,telefono,area").or(`nombre.ilike.%${q}%,dni.ilike.%${q}%`).order("nombre").limit(8);
+      $("#tpr").innerHTML = `<div class="card tight">${data.length?`<ul class="list">${data.map(p=>`<li><button type="button" class="item" style="width:100%;border:none;background:none;text-align:left" data-p="${p.id}"><div class="main"><div class="t">${esc(p.nombre)}</div><div class="s">${p.telefono?esc(p.telefono):"sin teléfono"}</div></div></button></li>`).join("")}</ul>`:""}
+        <div style="padding:10px 14px;border-top:1px solid var(--line)"><b>¿Paciente nuevo?</b><div class="fields" style="margin-top:6px"><label class="f">Apellido y nombre<input id="tnn" value="${esc(q)}"></label><label class="f">Celular<input id="tnt" type="tel" placeholder="11 5555-1234"></label></div><button type="button" class="btn" id="tnok" style="margin-top:8px">Crear paciente y usarlo</button></div></div>`;
+      $("#tpr").querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{ pac=data.find(x=>x.id===b.dataset.p); if(pac.area && !$("#fturno [name=area]").value) $("#fturno [name=area]").value = pac.area==="Funcional y Estética"?"":pac.area; pintaPac(); });
+      $("#tnok").onclick = async () => { const nombre=$("#tnn").value.trim(); if(!nombre) return toast("Escribí el nombre.");
+        const { data: np, error } = await sb.from("pacientes").insert({ nombre, telefono: $("#tnt").value.trim()||null }).select("id,nombre,telefono").single(); if(error) return fail(error);
+        pac = np; toast("Paciente creado"); pintaPac(); };
+    },250); };
+    $("#tpq").focus();
+  };
+  pintaPac();
+  const chequear = async () => { const f=$("#fturno [name=fecha]").value, h=$("#fturno [name=hora]").value, d=Number($("#fturno [name=duracion]").value); if(!f||!h){ $("#taviso").textContent=""; return; }
+    const avisos = []; const wd = String(dDe(f).getDay()); const rg = cfg.dias?.[wd];
+    if(!rg) avisos.push(`El consultorio no atiende los ${DIAS[wd].toLowerCase()}.`); else if(minDe(h) < minDe(rg[0]) || minDe(h)+d > minDe(rg[1])) avisos.push(`Fuera del horario de atención (${rg[0]} a ${rg[1]}).`);
+    const { data } = await sb.from("v_turnos").select("id,hora,duracion,paciente").eq("fecha", f).neq("estado","Cancelado");
+    (data||[]).filter(x=>x.id!==t.id && minDe(x.hora) < minDe(h)+d && minDe(h) < minDe(x.hora)+x.duracion).forEach(x=>avisos.push(`Se superpone con ${x.paciente} (${x.hora.slice(0,5)}).`));
+    $("#taviso").textContent = avisos.join(" "); };
+  ["fecha","hora","duracion"].forEach(n=>$(`#fturno [name=${n}]`).addEventListener("change", chequear)); chequear();
+  $("#fturno").onsubmit = async e => { e.preventDefault(); if(!pac) return toast("Elegí o creá el paciente.");
+    const d = Object.fromEntries(new FormData(e.target)); for(const k in d) if(d[k]==="") d[k]=null; d.duracion = Number(d.duracion); d.paciente_id = pac.id;
+    const r = nuevo ? await sb.from("turnos").insert(d).select("*").single() : await sb.from("turnos").update(d).eq("id", t.id).select("*").single(); if(r.error) return fail(r.error);
+    toast(nuevo ? "Turno guardado" : "Turno actualizado"); render();
+    const { data: vt } = await sb.from("v_turnos").select("*").eq("id", r.data.id).single(); modalTurno(vt);
+  };
+  if(!nuevo){
+    $("#tdel").onclick = async () => { if(!(await confirmar("¿Eliminar este turno? (si la paciente canceló, mejor cambiá el estado a Cancelado)"))) return; const { error } = await sb.from("turnos").delete().eq("id", t.id); if(error) return fail(error); cerrarModal(); toast("Turno eliminado"); render(); };
+    $("#twa").onclick = async () => { await enviarWhatsApp(t); };
+    $("#tics").onclick = () => icsTurno(t);
+    $("#tvis").onclick = async () => { await sb.from("turnos").update({ estado:"Atendido" }).eq("id", t.id); const { data: p } = await sb.from("v_pacientes").select("*").eq("id", t.paciente_id).single(); cerrarModal(); location.hash = `#/p/${t.paciente_id}/visitas`; setTimeout(()=>modalVisita(p, null, { fecha: t.fecha, motivo: t.motivo, area: t.area }), 600); };
+  }
+}
+
+/* Configuración de la agenda (en Catálogos) */
+async function pintaAgendaCfg(c){
+  const cfg = await configAgenda(); const msg = await leerConfig("mensaje_turno", ""); const token = await leerConfig("calendario_token", "");
+  const url = `${SUPABASE_URL}/functions/v1/agenda-ics?token=${token}`;
+  c.innerHTML = `<form id="fcfg" class="grid">
+    <div class="card"><h2>Horario de atención</h2><table>${[1,2,3,4,5,6,0].map(w=>{ const r=cfg.dias?.[String(w)]; return `<tr><td style="width:140px"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-w="${w}" ${r?"checked":""} style="width:auto;min-height:0"> ${DIAS[w]}</label></td><td><input type="time" step="900" data-wd="${w}" value="${r?r[0]:"09:00"}" style="width:auto"></td><td>a</td><td><input type="time" step="900" data-wh="${w}" value="${r?r[1]:"19:00"}" style="width:auto"></td></tr>`; }).join("")}</table>
+      <label class="f" style="margin-top:10px;max-width:260px">Duración habitual de un turno<select id="cdur">${[15,20,30,40,45,60].map(m=>`<option value="${m}" ${Number(cfg.duracion)===m?"selected":""}>${m} minutos</option>`).join("")}</select></label></div>
+    <div class="card"><h2>Mensaje de WhatsApp</h2><p class="muted" style="margin-top:0">Se puede usar {nombre}, {dia}, {fecha}, {hora} y {motivo}; se reemplazan solos.</p><textarea id="cmsg" rows="4">${esc(msg)}</textarea></div>
+    <div class="row"><button class="btn pri right">Guardar configuración</button></div></form>
+    <div class="card" style="margin-top:14px"><h2>Ver los turnos en el calendario del iPad / iPhone</h2>
+      <p>Suscribí el calendario una sola vez y los turnos que cargues aparecen solos en el calendario del dispositivo (se actualiza cada 15–60 minutos).</p>
+      <div class="row"><a class="btn pri" href="${url.replace(/^https:/,"webcal:")}">Suscribirme en este dispositivo</a><button type="button" class="btn" id="ccopy">Copiar enlace</button><button type="button" class="btn ghost danger" id="crot">Generar enlace nuevo</button></div>
+      <p class="muted" style="font-size:13px">Si el botón no abre el calendario: Ajustes → Calendario → Cuentas → Añadir cuenta → Otra → Añadir calendario suscrito, y pegá el enlace. El enlace es privado: no lo compartas (si se filtró, tocá “Generar enlace nuevo”).</p></div>`;
+  $("#ccopy").onclick = async () => { try{ await navigator.clipboard.writeText(url); toast("Enlace copiado"); }catch(e){ prompt("Copiá este enlace:", url); } };
+  $("#crot").onclick = async () => { if(!(await confirmar("¿Generar un enlace nuevo? El anterior deja de funcionar y hay que volver a suscribirse."))) return;
+    const nuevo = [...crypto.getRandomValues(new Uint8Array(24))].map(b=>b.toString(16).padStart(2,"0")).join("");
+    const { error } = await sb.from("config").upsert({ clave:"calendario_token", valor: nuevo }); if(error) return fail(error); toast("Enlace nuevo generado"); pintaAgendaCfg(c); };
+  $("#fcfg").onsubmit = async e => { e.preventDefault();
+    const dias = {}; for(const ch of c.querySelectorAll("[data-w]")){ if(!ch.checked) continue; const w=ch.dataset.w, a=c.querySelector(`[data-wd="${w}"]`).value, b=c.querySelector(`[data-wh="${w}"]`).value; if(!a||!b||a>=b) return toast(`Revisá el horario del ${DIAS[w].toLowerCase()}.`); dias[w]=[a,b]; }
+    const r1 = await sb.from("config").upsert({ clave:"agenda", valor:{ duracion:Number($("#cdur").value), dias } }); if(r1.error) return fail(r1.error);
+    const r2 = await sb.from("config").upsert({ clave:"mensaje_turno", valor:$("#cmsg").value.trim() }); if(r2.error) return fail(r2.error);
+    toast("Configuración guardada"); };
+}
+
+/* Insumos de un tratamiento (en Catálogos → Tratamientos) */
+async function editorInsumos(box, tratamientoId){
+  const prods = (await catalogo("productos", true)).filter(p=>p.activo);
+  const { data: ins } = tratamientoId ? await sb.from("tratamiento_insumos").select("*").eq("tratamiento_id", tratamientoId) : { data: [] };
+  const filas = (ins||[]).map(x=>({ producto_id:x.producto_id, cantidad:x.cantidad }));
+  const opciones = sel => `<option value="">— elegir producto —</option>` + ["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(p=>p.linea===l).map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(prodLabel(p))} · stock ${p.stock_actual}</option>`).join("")+`</optgroup>`).join("");
+  const pintar = () => { box.innerHTML = `<h3 style="margin-top:4px">Insumos que se descuentan del stock</h3><p class="muted" style="margin:0 0 6px;font-size:13px">Cada vez que se carga este tratamiento en una visita, se dan de baja estas unidades (de los lotes más antiguos). Ej.: activos, butterfly, suero.</p>
+    ${filas.map((f,i)=>`<div class="row" style="flex-wrap:nowrap;margin-bottom:6px"><select data-ip="${i}">${opciones(f.producto_id)}</select><input data-ic="${i}" type="number" min="1" step="1" value="${f.cantidad}" style="width:80px"><button type="button" class="iconbtn" data-ix="${i}">×</button></div>`).join("")}
+    <button type="button" class="btn ghost" id="iadd">+ Agregar insumo</button>`;
+    box.querySelectorAll("[data-ip]").forEach(s=>s.onchange=()=>filas[+s.dataset.ip].producto_id=s.value);
+    box.querySelectorAll("[data-ic]").forEach(s=>s.oninput=()=>filas[+s.dataset.ic].cantidad=Math.max(1,parseInt(s.value)||1));
+    box.querySelectorAll("[data-ix]").forEach(s=>s.onclick=()=>{ filas.splice(+s.dataset.ix,1); pintar(); });
+    $("#iadd").onclick = () => { filas.push({ producto_id:"", cantidad:1 }); pintar(); }; };
+  pintar();
+  return async (tid) => { const validas = filas.filter(f=>f.producto_id);
+    const r1 = await sb.from("tratamiento_insumos").delete().eq("tratamiento_id", tid); if(r1.error) throw r1.error;
+    const unicos = Object.values(validas.reduce((a,f)=>{ (a[f.producto_id] ??= { tratamiento_id:tid, producto_id:f.producto_id, cantidad:0 }).cantidad += f.cantidad; return a; }, {}));
+    if(unicos.length){ const r2 = await sb.from("tratamiento_insumos").insert(unicos); if(r2.error) throw r2.error; } };
+}
+
 /* ---------- INICIO ---------- */
 async function vInicio(v){
   const mes = hoy().slice(0,7), ini = mes+"-01";
-  const [{ data: vm }, prods, { data: rec }] = await Promise.all([
+  const [{ data: vm }, prods, { data: rec }, { data: tsem }] = await Promise.all([
     sb.from("v_visitas").select("total,area,fecha").gte("fecha", ini),
     catalogo("productos", true),
-    sb.from("v_visitas").select("id,fecha,paciente,paciente_id,area,motivo,detalle_items,total").order("fecha",{ascending:false}).order("creado",{ascending:false}).limit(8)
+    sb.from("v_visitas").select("id,fecha,paciente,paciente_id,area,motivo,detalle_items,total").order("fecha",{ascending:false}).order("creado",{ascending:false}).limit(8),
+    sb.from("v_turnos").select("*").gte("fecha", hoy()).lte("fecha", masDias(lunesDe(hoy()),6)).neq("estado","Cancelado").order("fecha").order("hora")
   ]);
   alertasStock = prods.filter(x=>x.activo && x.alerta).length;
   const tot = vm.reduce((a,x)=>a+Number(x.total||0),0);
@@ -345,6 +543,8 @@ async function vInicio(v){
     <div class="search card" style="padding:0;border:none;background:none;margin-bottom:16px">${ICON.search}<input id="qhome" placeholder="Buscar paciente por apellido, nombre o DNI" autocomplete="off"></div>
     <div id="reshome"></div>
     <div class="row" style="margin-bottom:16px"><button class="btn pri" id="hent">Entrega de producto</button><button class="btn" id="hcomp">+ Cargar compra</button></div>
+    <div class="card tight" style="margin-bottom:16px"><div style="padding:14px 16px 4px" class="row"><h2 style="margin:0">Turnos de esta semana</h2><a class="btn ghost right" href="#/agenda">Ver agenda</a><button class="btn pri" id="hturno">+ Turno</button></div>
+      ${tsem.length?`<ul class="list">${tsem.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left" data-ht="${t.id}"><div class="main"><div class="t">${fechaLarga(t.fecha)} · ${t.hora.slice(0,5)} · ${esc(t.paciente)}</div><div class="s">${esc(t.motivo||"")}${t.whatsapp_enviado?" · WhatsApp enviado ✓":""}</div></div><span class="pill ${estadoTurnoClase(t.estado)}">${t.estado}</span></button></li>`).join("")}</ul>`:`<div class="empty">No hay turnos de acá al domingo.</div>`}</div>
     <div class="grid g3" style="margin-bottom:16px">
       <div class="card stat"><div class="n">${pesos(tot)}</div><div class="l">Facturado este mes · ${vm.length} visitas</div></div>
       <div class="card stat"><div class="n">${pesos(est)}</div><div class="l">${areaPill("Estética")} este mes</div></div>
@@ -358,6 +558,8 @@ async function vInicio(v){
     </div>`;
   buscadorPacientes($("#qhome"), $("#reshome"));
   $("#hent").onclick = () => modalEntrega(null);
+  $("#hturno").onclick = () => modalTurno({ fecha: hoy() });
+  v.querySelectorAll("[data-ht]").forEach(b=>b.onclick=()=>modalTurno(tsem.find(t=>t.id===b.dataset.ht)));
   $("#hcomp").onclick = () => modalCompra();
 }
 function buscadorPacientes(input, out){
@@ -448,11 +650,12 @@ async function tabVisitas(c, p){
   $("#bentp").onclick = () => modalEntrega(p);
   c.querySelectorAll("[data-v]").forEach(b => b.onclick = () => modalVisita(p, data.find(x=>x.id===b.dataset.v)));
 }
-async function modalVisita(p, visita=null){
+async function modalVisita(p, visita=null, preset={}){
   const [trats, prods] = await Promise.all([catalogo("tratamientos"), catalogo("productos")]);
   let items = [];
   let unidadesPorItem = {};
-  if(visita){ const { data } = await sb.from("visita_items").select("*").eq("visita_id", visita.id); items = data;
+  let insumos = [];
+  if(visita){ const { data } = await sb.from("visita_items").select("*, productos(nombre)").eq("visita_id", visita.id); insumos = data.filter(i=>i.tipo==="Insumo"); items = data.filter(i=>i.tipo!=="Insumo");
     const ids = items.filter(i=>i.producto_id).map(i=>i.id);
     if(ids.length){ const { data: us } = await sb.from("unidades").select("codigo,visita_item_id").in("visita_item_id", ids); (us||[]).forEach(u=>(unidadesPorItem[u.visita_item_id] ??= []).push(u.codigo)); } }
   const fila = (it={}) => `<div class="itemrow" data-prod0="${it.producto_id||""}" data-u="${esc((unidadesPorItem[it.id]||[]).join("|"))}">
@@ -464,12 +667,12 @@ async function modalVisita(p, visita=null){
   abrirModal(visita?"Visita del "+fecha(visita.fecha):"Nueva visita · "+p.nombre, `
     <form id="fv" class="grid">
       <div class="fields">
-        <label class="f">Fecha<input name="fecha" type="date" required value="${visita?.fecha||hoy()}"></label>
-        <label class="f">Área<select name="area">${["Estética","Funcional","Funcional y Estética"].map(s=>`<option ${(visita?.area||(p.area==="Funcional"?"Funcional":"Estética"))===s?"selected":""}>${s}</option>`).join("")}</select></label>
-        <label class="f wide">Motivo / resumen<input name="motivo" value="${esc(visita?.motivo)}"></label>
+        <label class="f">Fecha<input name="fecha" type="date" required value="${visita?.fecha||preset.fecha||hoy()}"></label>
+        <label class="f">Área<select name="area">${["Estética","Funcional","Funcional y Estética"].map(s=>`<option ${(visita?.area||preset.area||(p.area==="Funcional"?"Funcional":"Estética"))===s?"selected":""}>${s}</option>`).join("")}</select></label>
+        <label class="f wide">Motivo / resumen<input name="motivo" value="${esc(visita?.motivo||preset.motivo)}"></label>
       </div>
       ${visita?.total_historico?`<p class="muted" style="margin:0">Registro de la facturación anterior: ${esc(visita.motivo||"")} · ${pesos(visita.total_historico)}</p>`:""}
-      <div><h3>Tratamientos, productos y medicamentos</h3><div id="its"></div><button type="button" class="btn ghost" id="badd">+ Agregar ítem</button></div>
+      <div><h3>Tratamientos, productos y medicamentos</h3><div id="its"></div><button type="button" class="btn ghost" id="badd">+ Agregar ítem</button>${insumos.length?`<p class="muted" style="font-size:13px;margin:6px 0 0">Insumos descontados del stock: ${insumos.map(i=>esc((i.productos?.nombre||"")+(i.cantidad?" ×"+num(i.cantidad):"")+(i.observacion?" ("+i.observacion+")":""))).join(", ")}</p>`:""}</div>
       <label class="f">Observaciones<textarea name="observaciones">${esc(visita?.observaciones)}</textarea></label>
       <div class="row"><b>Total: <span id="vtot">$ 0</span></b><span class="right"></span>${visita?`<button type="button" class="btn danger" id="bdelv">Eliminar visita</button>`:""}<button class="btn pri" type="submit">Guardar visita</button></div>
     </form>`);
@@ -1004,16 +1207,16 @@ async function vFacturacion(v){
 async function vAjustes(v){
   const [trats, dets] = await Promise.all([catalogo("tratamientos",true), catalogo("determinaciones",true)]);
   v.innerHTML = `<h1>Catálogos</h1><p class="sub">Tratamientos con su precio y rangos de laboratorio. Lo que cargues acá se usa en las visitas y en el estado de cada análisis.</p>
-    <div class="tabs"><button class="tab on" data-c="t">Tratamientos</button><button class="tab" data-c="d">Rangos de laboratorio</button></div><div id="cc"></div>`;
+    <div class="tabs"><button class="tab on" data-c="t">Tratamientos</button><button class="tab" data-c="d">Rangos de laboratorio</button><button class="tab" data-c="a">Agenda</button></div><div id="cc"></div>`;
   const pintaT = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:10px"><button class="btn pri right" id="bnt">+ Tratamiento</button></div><div class="card tight">${trats.length?`<ul class="list">${trats.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left;cursor:pointer" data-t="${t.id}"><div class="main"><div class="t">${esc(t.nombre)}${t.activo?"":" <span class='pill s-none'>inactivo</span>"}</div><div class="s">${esc(t.categoria||"")}</div></div>${areaPill(t.area)}<div class="r">${pesos(t.precio)}</div></button></li>`).join("")}</ul>`:`<div class="empty">Cargá los tratamientos que hace (facial, PRP, sueroterapia…) con su precio. Así al cargar una visita se completan solos.</div>`}</div>`;
     $("#bnt").onclick=()=>modalTrat({}); $("#cc").querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>modalTrat(trats.find(x=>x.id===b.dataset.t))); };
   const pintaD = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:8px"><span class="right"></span><button class="btn" id="bplan">Imprimir planilla para completar a mano</button></div><p class="muted">Tocá una determinación para cargar el rango de referencia y el óptimo funcional. Si es distinto para hombres, completá también esos campos.</p><div class="card tight"><div class="tablewrap"><table><thead><tr><th>Determinación</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Hombres</th><th></th></tr></thead><tbody>${dets.map(d=>`<tr><td><b>${esc(d.nombre)}</b><div class="muted" style="font-size:12.5px">${esc(d.grupo)}</div></td><td>${esc(d.unidad||"")}</td>${d.rango_por?`<td colspan="2"><span class="pill s-info">${d.rango_por==="fase"?"Según fase del ciclo":"Según edad"}</span></td>`:`<td>${d.ref_min!=null||d.ref_max!=null?rtxt(d.ref_min,d.ref_max):'<span class="muted">—</span>'}</td><td>${d.opt_min!=null||d.opt_max!=null?rtxt(d.opt_min,d.opt_max):'<span class="muted">—</span>'}</td>`}<td class="muted">${[d.ref_min_h,d.ref_max_h,d.opt_min_h,d.opt_max_h].some(x=>x!=null)?"sí":""}</td><td><button class="btn ghost" data-d="${d.id}">Editar</button></td></tr>`).join("")}</tbody></table></div></div>`;
     $("#cc").querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>modalDet(dets.find(x=>x.id===b.dataset.d)));
     $("#bplan").onclick = () => imprimirPlanilla(dets); };
-  document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{ document.querySelectorAll("[data-c]").forEach(x=>x.classList.toggle("on",x===b)); b.dataset.c==="t"?pintaT():pintaD(); });
+  document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{ document.querySelectorAll("[data-c]").forEach(x=>x.classList.toggle("on",x===b)); b.dataset.c==="t"?pintaT():b.dataset.c==="d"?pintaD():pintaAgendaCfg($("#cc")); });
   pintaT();
 }
-function modalTrat(t){
+async function modalTrat(t){
   const nuevo=!t.id;
   abrirModal(nuevo?"Nuevo tratamiento":"Editar tratamiento", `<form id="ft" class="fields">
     <label class="f wide">Nombre<input name="nombre" required value="${esc(t.nombre)}"></label>
@@ -1021,9 +1224,13 @@ function modalTrat(t){
     <label class="f">Categoría<input name="categoria" list="catl" value="${esc(t.categoria)}"><datalist id="catl">${["Facial","Corporal","Inyectable","Sueroterapia","Consulta","Capilar"].map(c=>`<option>${c}</option>`).join("")}</datalist></label>
     <label class="f">Precio $<input name="precio" type="number" step="any" value="${t.precio??""}"></label>
     <label class="f" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="activo" ${t.activo===false?"":"checked"} style="width:auto;min-height:0"> Activo</label>
+    <div class="wide card" id="tins" style="padding:10px 12px"></div>
     <div class="wide row"><button class="btn pri right">Guardar</button></div></form>`);
+  const guardarInsumos = await editorInsumos($("#tins"), t.id);
   $("#ft").onsubmit = async e => { e.preventDefault(); const d=Object.fromEntries(new FormData(e.target)); d.activo=!!d.activo; for(const k in d) if(d[k]==="") d[k]=null;
-    const r = nuevo ? await sb.from("tratamientos").insert(d) : await sb.from("tratamientos").update(d).eq("id",t.id); if(r.error) return fail(r.error); cerrarModal(); toast("Tratamiento guardado"); cache.tratamientos=null; render(); };
+    const r = nuevo ? await sb.from("tratamientos").insert(d).select("id").single() : await sb.from("tratamientos").update(d).eq("id",t.id).select("id").single(); if(r.error) return fail(r.error);
+    try{ await guardarInsumos(r.data.id); }catch(err){ return fail(err); }
+    cerrarModal(); toast("Tratamiento guardado"); cache.tratamientos=null; render(); };
 }
 async function modalDet(d){
   const { data: esp } = await sb.from("rangos_especiales").select("*").eq("determinacion_id", d.id);
