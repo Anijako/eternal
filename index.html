@@ -126,6 +126,11 @@ td.num,th.num{text-align:right}
 .bar span{display:block;height:100%;background:var(--accent)}
 .right{margin-left:auto}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+/* historia clínica */
+.hc-h{font-size:10pt;color:#5B2A4C;border-bottom:1px solid #d9c7d2;padding-bottom:2px;margin:12px 0 5px;letter-spacing:.04em}
+.hc-datos{border-collapse:collapse;font-size:9.5pt;width:auto}.hc-datos th,.hc-datos td{border:none!important}.hc-datos th{text-align:left;color:#666;font-weight:600;padding:2px 14px 2px 0;font-size:8.5pt;text-transform:uppercase}.hc-datos td{padding:2px 0}
+.hc-txt{font-size:9.5pt}.hc-vis td{vertical-align:top;font-size:9pt}.hc-ins,.hc-obs{color:#444;font-size:8.6pt}
+.hc-lab{margin-bottom:8px;break-inside:avoid}.hc-labh{font-weight:700;font-size:9.5pt;margin:6px 0 2px}
 /* agenda */
 .ag{display:grid;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface);margin-bottom:8px}
 .ag-h{position:sticky;top:0;background:var(--surface2);font-weight:700;text-align:center;padding:8px 4px;border-bottom:1px solid var(--line);grid-row:1;font-size:14px}
@@ -211,7 +216,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31w";
+const APP_VERSION = "2026-10-31x";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -646,7 +651,7 @@ async function vPaciente(v, id, tab){
   const datos = [["DNI",p.dni],["Edad",p.edad!=null?p.edad+" años":null],["Sexo",p.sexo],["Nacimiento",p.fecha_nacimiento?fecha(p.fecha_nacimiento):null],["Obra social",[p.obra_social,p.nro_afiliado].filter(Boolean).join(" · ")],["Teléfono",p.telefono],["Email",p.email]];
   v.innerHTML = `
     <a href="#/pacientes" class="btn ghost" style="padding-left:0">← Pacientes</a>
-    <div class="row"><h1>${esc(p.nombre)}</h1>${areaPill(p.area)}<button class="btn right" id="bunif">Unificar duplicados</button><button class="btn" id="bedit">Editar datos</button></div>
+    <div class="row"><h1>${esc(p.nombre)}</h1>${areaPill(p.area)}<button class="btn right" id="bhc">Historia clínica (PDF)</button><button class="btn" id="bunif">Unificar duplicados</button><button class="btn" id="bedit">Editar datos</button></div>
     <p class="sub">${p.cantidad_visitas} visitas · última ${fechaCorta(p.ultima_visita)}${p.ultimo_laboratorio?" · último laboratorio "+fechaCorta(p.ultimo_laboratorio):""}</p>
     <div class="grid g2">
       <div class="card"><h3 style="margin-top:0">Datos</h3><table>${datos.map(([k,x])=>`<tr><th style="width:40%">${k}</th><td>${x?esc(x):`<span class="muted">—</span>`}</td></tr>`).join("")}</table>${p.nombres_anteriores?`<p class="muted" style="font-size:13px;margin:10px 0 0">En la facturación figuraba como: ${esc(p.nombres_anteriores)}</p>`:""}</div>
@@ -659,6 +664,7 @@ async function vPaciente(v, id, tab){
     <div id="tabc"></div>`;
   $("#bedit").onclick = () => modalPaciente(p);
   $("#bunif").onclick = () => modalUnificar(p);
+  $("#bhc").onclick = () => imprimirHistoria(p);
   document.querySelectorAll(".tab").forEach(b => b.onclick = () => { location.hash = `#/p/${id}/${b.dataset.t}`; });
   const c = $("#tabc");
   if(tab==="visitas") await tabVisitas(c, p);
@@ -888,6 +894,63 @@ async function modalUnificar(p){
     if(error){ $("#uok").disabled = false; return fail(error); }
     cerrarModal(); toast(`Listo: se movieron ${data.visitas} visitas, ${data.laboratorios} valores de laboratorio y ${data.turnos} turnos`); render();
   };
+}
+
+/* ---------- HISTORIA CLÍNICA COMPLETA ---------- */
+async function imprimirHistoria(p){
+  const conImportes = await confirmar2("¿Incluir los importes cobrados en la historia clínica?", "Sí, con importes", "No, solo lo clínico");
+  await cargarCualitativas();
+  const [{ data: vis }, { data: its }, { data: labs }] = await Promise.all([
+    sb.from("v_visitas").select("*").eq("paciente_id", p.id).order("fecha").order("creado"),
+    sb.from("visita_items").select("visita_id,tipo,cantidad,monto,descripcion,observacion,item_padre,tratamientos(nombre),productos(nombre),visitas!inner(paciente_id)").eq("visitas.paciente_id", p.id),
+    sb.from("v_resultados").select("*").eq("paciente_id", p.id).order("fecha").order("orden")
+  ]);
+  const porVisita = {}; (its||[]).forEach(i => (porVisita[i.visita_id] ??= []).push(i));
+  const detalle = v => { const L = porVisita[v.id] || []; const princ = L.filter(i=>i.tipo!=="Insumo");
+    const txt = princ.map(i => { const n = i.tratamientos?.nombre || i.productos?.nombre || i.descripcion || i.tipo;
+      const ins = L.filter(x=>x.tipo==="Insumo" && x.item_padre && princ.indexOf(i)>=0 && x.productos).filter(x=>true);
+      return `<div>• <b>${esc(i.tipo)}:</b> ${esc(n)}${Number(i.cantidad)>1?` ×${num(i.cantidad)}`:""}${i.descripcion&&n!==i.descripcion?` — ${esc(i.descripcion)}`:""}${i.observacion?` <i>(${esc(i.observacion)})</i>`:""}${conImportes&&Number(i.monto)?` · ${pesos(i.monto)}`:""}</div>`; }).join("");
+    const insumos = L.filter(x=>x.tipo==="Insumo"); 
+    return (v.motivo && !princ.length ? `<div>${esc(v.motivo)}</div>` : (v.motivo && v.origen!=="Facturación histórica" ? `<div><b>Motivo:</b> ${esc(v.motivo)}</div>` : "")) + txt +
+      (insumos.length ? `<div class="hc-ins"><b>Activos / insumos:</b> ${insumos.map(x=>x.productos?`${esc(x.productos.nombre)} ×${num(x.cantidad)}`:esc(x.observacion||"")).join(", ")}</div>` : "") +
+      (v.observaciones ? `<div class="hc-obs"><b>Obs.:</b> ${esc(v.observaciones)}</div>` : ""); };
+  const fechasLab = [...new Set((labs||[]).map(r=>r.fecha))];
+  const datos = [["Apellido y nombre",p.nombre],["DNI",p.dni],["Fecha de nacimiento",p.fecha_nacimiento?fecha(p.fecha_nacimiento):null],["Edad",p.edad!=null?p.edad+" años":null],["Sexo",p.sexo],
+    ["Obra social",[p.obra_social,p.nro_afiliado&&"N° "+p.nro_afiliado].filter(Boolean).join(" · ")],["Teléfono",p.telefono],["Email",p.email],["Área",p.area],["También figuraba como",p.nombres_anteriores]].filter(x=>x[1]);
+  const totalCobrado = (vis||[]).reduce((a,v)=>a+Number(v.total||0),0);
+  const html = cabeceraInforme(p, "Historia clínica", `Emitida el ${fecha(hoy())}`) +
+    `<h3 class="hc-h">Datos personales</h3><table class="hc-datos">${datos.map(([k,v])=>`<tr><th>${k}</th><td>${esc(v)}</td></tr>`).join("")}</table>
+    <h3 class="hc-h">Antecedentes</h3><div class="hc-txt">${p.antecedentes?esc(p.antecedentes).replace(/\n/g,"<br>"):'<span class="inf-mut">Sin datos cargados</span>'}</div>
+    <h3 class="hc-h">Alergias / medicación habitual</h3><div class="hc-txt">${p.alergias_medicacion?esc(p.alergias_medicacion).replace(/\n/g,"<br>"):'<span class="inf-mut">Sin datos cargados</span>'}</div>
+    ${p.observaciones?`<h3 class="hc-h">Observaciones</h3><div class="hc-txt">${esc(p.observaciones).replace(/\n/g,"<br>")}</div>`:""}
+    <h3 class="hc-h">Visitas y tratamientos (${(vis||[]).length})</h3>
+    ${(vis||[]).length?`<table class="inf-tab hc-vis"><thead><tr><th style="width:13%">Fecha</th><th style="width:13%">Área</th><th>Detalle</th>${conImportes?'<th class="num" style="width:13%">Importe</th>':""}</tr></thead><tbody>${vis.map(v=>`<tr><td>${fecha(v.fecha)}</td><td>${esc(v.area||"")}</td><td>${detalle(v)}</td>${conImportes?`<td class="num">${pesos(v.total)}</td>`:""}</tr>`).join("")}</tbody>${conImportes?`<tfoot><tr><td colspan="3"><b>Total</b></td><td class="num"><b>${pesos(totalCobrado)}</b></td></tr></tfoot>`:""}</table>`:'<p class="inf-mut">Sin visitas registradas.</p>'}
+    <h3 class="hc-h">Laboratorios (${fechasLab.length})</h3>
+    ${fechasLab.length?fechasLab.map(f=>{ const rs=labs.filter(r=>r.fecha===f); const fase=rs.find(r=>r.fase)?.fase;
+      return `<div class="hc-lab"><div class="hc-labh">Análisis del ${fecha(f)}${fase?" · "+esc(fase):""}</div><table class="inf-tab"><thead><tr><th>Determinación</th><th class="num">Resultado</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Estado</th></tr></thead><tbody>${rs.map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${valorTxt(r)}</b></td><td>${esc(r.unidad||"")}</td><td>${rangoTxt(r.rmin,r.rmax)}${r.rango_categoria?`<div class="inf-mut">${esc(r.rango_categoria)}</div>`:""}</td><td>${rangoTxt(r.omin,r.omax)}</td><td class="inf-est">${punto(r.estado)} ${semaforoTxt(r.estado)}</td></tr>`).join("")}</tbody></table></div>`; }).join(""):'<p class="inf-mut">Sin laboratorios registrados.</p>'}` + leyendaInforme();
+  imprimirHTML(html, "print-doc", "@page{size:A4;margin:12mm 13mm}", `Historia clínica ${p.nombre} ${fecha(hoy()).replaceAll("/","-")}`);
+}
+function confirmar2(msg, si, no){ return new Promise(res=>{ const bg=document.createElement("div"); bg.className="modal-bg"; bg.style.zIndex=60;
+  bg.innerHTML=`<div class="modal" style="max-width:440px"><p style="font-weight:600">${esc(msg)}</p><div class="row"><button class="btn right" id="c2no">${esc(no)}</button><button class="btn pri" id="c2si">${esc(si)}</button></div></div>`;
+  document.body.appendChild(bg); $("#c2no",bg).onclick=()=>{bg.remove();res(false)}; $("#c2si",bg).onclick=()=>{bg.remove();res(true)}; }); }
+
+/* ---------- COPIAS DE SEGURIDAD ---------- */
+async function pintaCopias(c){
+  c.innerHTML = `<p class="muted">Cargando…</p>`;
+  const { data: lista, error } = await sb.storage.from("copias").list("", { limit: 100, sortBy: { column: "name", order: "desc" } });
+  if(error){ c.innerHTML = `<div class="card">No se pudieron leer las copias: ${esc(error.message)}</div>`; return; }
+  const L = (lista||[]).filter(f=>f.name.startsWith("copia_"));
+  const urls = L.length ? (await sb.storage.from("copias").createSignedUrls(L.map(f=>f.name), 3600, { download: true })).data || [] : [];
+  const nombreLindo = n => { const m = n.match(/copia_(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(_auto)?/); return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]} hs ${m[6]?"· automática":"· manual"}` : n; };
+  c.innerHTML = `<div class="card"><h2>Copias de seguridad</h2>
+      <p>Todos los <b>domingos a la madrugada</b> se guarda sola una copia completa de la base: pacientes, visitas, laboratorios, stock, lotes, turnos y catálogos. Se conservan las últimas 30, en un espacio privado al que solo acceden los usuarios autorizados.</p>
+      <p class="muted" style="font-size:14px">Recomendación: una vez por mes descargá la última copia y guardala fuera del sistema (Archivos / iCloud / Google Drive). Así, aunque pase algo con el servicio, los datos quedan a resguardo. Para leer la historia de un paciente en papel, usá “Historia clínica (PDF)” en su ficha.</p>
+      <div class="row"><button class="btn pri" id="cpnow">Hacer una copia ahora</button></div></div>
+    <div class="card tight" style="margin-top:14px">${L.length?`<ul class="list">${L.map((f,i)=>`<li><div class="item"><div class="main"><div class="t">${nombreLindo(f.name)}</div><div class="s">${Math.round((f.metadata?.size||0)/1024)} KB</div></div>${urls[i]?.signedUrl?`<a class="btn" href="${urls[i].signedUrl}" download="${esc(f.name)}">Descargar</a>`:""}</div></li>`).join("")}</ul>`:`<div class="empty">Todavía no hay copias.</div>`}</div>`;
+  $("#cpnow").onclick = async () => { const b=$("#cpnow"); b.disabled=true; b.textContent="Haciendo la copia…";
+    const { data, error } = await sb.functions.invoke("copia-seguridad", { body: { origen: "manual" } });
+    if(error){ b.disabled=false; b.textContent="Hacer una copia ahora"; return fail(error); }
+    toast(`Copia guardada: ${data.conteo?.pacientes||0} pacientes, ${data.conteo?.visitas||0} visitas, ${data.conteo?.resultados||0} valores de laboratorio`); pintaCopias(c); };
 }
 
 /* ---------- LABORATORIOS ---------- */
@@ -1285,13 +1348,13 @@ async function vFacturacion(v){
 async function vAjustes(v){
   const [trats, dets] = await Promise.all([catalogo("tratamientos",true), catalogo("determinaciones",true)]);
   v.innerHTML = `<h1>Catálogos</h1><p class="sub">Tratamientos con su precio y rangos de laboratorio. Lo que cargues acá se usa en las visitas y en el estado de cada análisis.</p>
-    <div class="tabs"><button class="tab on" data-c="t">Tratamientos</button><button class="tab" data-c="d">Rangos de laboratorio</button><button class="tab" data-c="a">Agenda</button></div><div id="cc"></div>`;
+    <div class="tabs"><button class="tab on" data-c="t">Tratamientos</button><button class="tab" data-c="d">Rangos de laboratorio</button><button class="tab" data-c="a">Agenda</button><button class="tab" data-c="b">Copias de seguridad</button></div><div id="cc"></div>`;
   const pintaT = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:10px"><button class="btn pri right" id="bnt">+ Tratamiento</button></div><div class="card tight">${trats.length?`<ul class="list">${trats.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left;cursor:pointer" data-t="${t.id}"><div class="main"><div class="t">${esc(t.nombre)}${t.activo?"":" <span class='pill s-none'>inactivo</span>"}</div><div class="s">${esc(t.categoria||"")}</div></div>${areaPill(t.area)}<div class="r">${pesos(t.precio)}</div></button></li>`).join("")}</ul>`:`<div class="empty">Cargá los tratamientos que hace (facial, PRP, sueroterapia…) con su precio. Así al cargar una visita se completan solos.</div>`}</div>`;
     $("#bnt").onclick=()=>modalTrat({}); $("#cc").querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>modalTrat(trats.find(x=>x.id===b.dataset.t))); };
   const pintaD = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:8px"><span class="right"></span><button class="btn" id="bplan">Imprimir planilla para completar a mano</button></div><p class="muted">Tocá una determinación para cargar el rango de referencia y el óptimo funcional. Si es distinto para hombres, completá también esos campos.</p><div class="card tight"><div class="tablewrap"><table><thead><tr><th>Determinación</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Hombres</th><th></th></tr></thead><tbody>${dets.map(d=>`<tr><td><b>${esc(d.nombre)}</b><div class="muted" style="font-size:12.5px">${esc(d.grupo)}</div></td><td>${esc(d.unidad||"")}</td>${d.rango_por?`<td colspan="2"><span class="pill s-info">${d.rango_por==="fase"?"Según fase del ciclo":"Según edad"}</span></td>`:`<td>${d.ref_min!=null||d.ref_max!=null?rtxt(d.ref_min,d.ref_max):'<span class="muted">—</span>'}</td><td>${d.opt_min!=null||d.opt_max!=null?rtxt(d.opt_min,d.opt_max):'<span class="muted">—</span>'}</td>`}<td class="muted">${[d.ref_min_h,d.ref_max_h,d.opt_min_h,d.opt_max_h].some(x=>x!=null)?"sí":""}</td><td><button class="btn ghost" data-d="${d.id}">Editar</button></td></tr>`).join("")}</tbody></table></div></div>`;
     $("#cc").querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>modalDet(dets.find(x=>x.id===b.dataset.d)));
     $("#bplan").onclick = () => imprimirPlanilla(dets); };
-  document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{ document.querySelectorAll("[data-c]").forEach(x=>x.classList.toggle("on",x===b)); b.dataset.c==="t"?pintaT():b.dataset.c==="d"?pintaD():pintaAgendaCfg($("#cc")); });
+  document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{ document.querySelectorAll("[data-c]").forEach(x=>x.classList.toggle("on",x===b)); b.dataset.c==="t"?pintaT():b.dataset.c==="d"?pintaD():b.dataset.c==="a"?pintaAgendaCfg($("#cc")):pintaCopias($("#cc")); });
   pintaT();
 }
 async function modalTrat(t){
