@@ -177,7 +177,7 @@ td.num,th.num{text-align:right}
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31e";
+const APP_VERSION = "2026-10-31f";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -482,6 +482,9 @@ async function modalVisita(p, visita=null){
   };
 }
 
+const CUALI = {}; // determinacion_id -> true si es cualitativa
+async function cargarCualitativas(){ try{ (await catalogo("determinaciones")).forEach(d=>{ if(d.cualitativa) CUALI[d.id]=true; }); }catch(e){} }
+const valorTxt = r => CUALI[r.determinacion_id] ? (Number(r.valor)===0 ? "No reactivo" : "Reactivo") : num(r.valor);
 /* ---------- INFORMES IMPRESOS (laboratorio y evolución) ---------- */
 const DRA = "Dra. Analía Jakowluk";
 const semaforo = e => ({"Óptimo":"#2E8B57","Normal":"#2E8B57","Fuera del óptimo":"#E8B000","Alto":"#C62828","Bajo":"#C62828"}[e] || "#9E9E9E");
@@ -507,7 +510,7 @@ function imprimirHTML(html, clase, pageCss){
 function imprimirLaboratorio(p, f, rs){
   const grupos = [...new Set(rs.map(r=>r.grupo))];
   const html = cabeceraInforme(p, "Informe de laboratorio", "Análisis del " + fecha(f)) +
-    `<table class="inf-tab"><thead><tr><th>Determinación</th><th class="num">Resultado</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Estado</th></tr></thead>${grupos.map(g=>`<tbody><tr class="inf-grp"><td colspan="6">${esc(g)}</td></tr>${rs.filter(r=>r.grupo===g).map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${num(r.valor)}</b></td><td>${esc(r.unidad||"")}</td><td>${rangoTxt(r.rmin,r.rmax)}</td><td>${rangoTxt(r.omin,r.omax)}</td><td class="inf-est">${punto(r.estado)} ${semaforoTxt(r.estado)}</td></tr>`).join("")}</tbody>`).join("")}</table>` + leyendaInforme();
+    `<table class="inf-tab"><thead><tr><th>Determinación</th><th class="num">Resultado</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Estado</th></tr></thead>${grupos.map(g=>`<tbody><tr class="inf-grp"><td colspan="6">${esc(g)}</td></tr>${rs.filter(r=>r.grupo===g).map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${valorTxt(r)}</b></td><td>${esc(r.unidad||"")}</td><td>${rangoTxt(r.rmin,r.rmax)}</td><td>${rangoTxt(r.omin,r.omax)}</td><td class="inf-est">${punto(r.estado)} ${semaforoTxt(r.estado)}</td></tr>`).join("")}</tbody>`).join("")}</table>` + leyendaInforme();
   imprimirHTML(html, "print-doc", "@page{size:A4;margin:12mm 13mm}");
 }
 function imprimirEvolucion(p, porDet){
@@ -515,16 +518,17 @@ function imprimirEvolucion(p, porDet){
   const html = cabeceraInforme(p, "Evolución de laboratorio", fechas.length ? `${fechas.length} análisis · ${fecha(fechas[0])} al ${fecha(fechas.at(-1))}` : "") +
     `<div class="inf-evo">${porDet.map(rs=>{ const u=rs.at(-1); return `<div class="inf-ev"><div class="inf-ev-h"><b>${esc(u.determinacion)}</b><span>${esc(u.unidad||"")}</span></div>
       <div class="inf-ev-r">Ref. ${rangoTxt(u.rmin,u.rmax)} · Óptimo ${rangoTxt(u.omin,u.omax)}</div>${grafico(rs)}
-      <table class="inf-ev-t">${rs.map(r=>`<tr><td>${fecha(r.fecha)}</td><td class="num"><b>${num(r.valor)}</b></td><td>${punto(r.estado)} ${semaforoTxt(r.estado)}</td></tr>`).join("")}</table></div>`; }).join("")}</div>` + leyendaInforme();
+      <table class="inf-ev-t">${rs.map(r=>`<tr><td>${fecha(r.fecha)}</td><td class="num"><b>${valorTxt(r)}</b></td><td>${punto(r.estado)} ${semaforoTxt(r.estado)}</td></tr>`).join("")}</table></div>`; }).join("")}</div>` + leyendaInforme();
   imprimirHTML(html, "print-doc", "@page{size:A4;margin:12mm 13mm}");
 }
 
 /* ---------- LABORATORIOS ---------- */
 async function tabLabs(c, p){
+  await cargarCualitativas();
   const { data } = await sb.from("v_resultados").select("*").eq("paciente_id", p.id).order("fecha",{ascending:false}).order("orden");
   const fechas = [...new Set(data.map(r=>r.fecha))];
   c.innerHTML = `<div class="row" style="margin-bottom:10px"><span class="muted">${fechas.length} análisis cargados</span><button class="btn pri right" id="bnl">+ Cargar laboratorio</button></div>
-    ${fechas.length?fechas.map(f=>{ const rs=data.filter(r=>r.fecha===f); return `<div class="card tight" style="margin-bottom:12px"><div class="row" style="padding:12px 16px"><h2 style="margin:0">${fecha(f)}</h2><span class="muted">${rs.length} valores</span><button class="btn ghost right" data-pf="${f}">Imprimir</button><button class="btn ghost" data-f="${f}">Editar</button></div><div class="tablewrap"><table><thead><tr><th>Determinación</th><th class="num">Valor</th><th>Unidad</th><th>Rango</th><th>Estado</th></tr></thead><tbody>${rs.map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${num(r.valor)}</b></td><td class="muted">${esc(r.unidad)}</td><td class="muted">${rango(r)}</td><td><span class="pill ${estadoClase(r.estado)}">${esc(r.estado)}</span></td></tr>`).join("")}</tbody></table></div></div>`; }).join(""):`<div class="card empty">Todavía no hay laboratorios cargados para ${esc(p.nombre)}.</div>`}`;
+    ${fechas.length?fechas.map(f=>{ const rs=data.filter(r=>r.fecha===f); return `<div class="card tight" style="margin-bottom:12px"><div class="row" style="padding:12px 16px"><h2 style="margin:0">${fecha(f)}</h2><span class="muted">${rs.length} valores</span><button class="btn ghost right" data-pf="${f}">Imprimir</button><button class="btn ghost" data-f="${f}">Editar</button></div><div class="tablewrap"><table><thead><tr><th>Determinación</th><th class="num">Valor</th><th>Unidad</th><th>Rango</th><th>Estado</th></tr></thead><tbody>${rs.map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${valorTxt(r)}</b></td><td class="muted">${esc(r.unidad)}</td><td class="muted">${rango(r)}</td><td><span class="pill ${estadoClase(r.estado)}">${esc(r.estado)}</span></td></tr>`).join("")}</tbody></table></div></div>`; }).join(""):`<div class="card empty">Todavía no hay laboratorios cargados para ${esc(p.nombre)}.</div>`}`;
   $("#bnl").onclick = () => modalLab(p);
   c.querySelectorAll("[data-f]").forEach(b => b.onclick = () => modalLab(p, b.dataset.f, data.filter(r=>r.fecha===b.dataset.f)));
   c.querySelectorAll("[data-pf]").forEach(b => b.onclick = () => imprimirLaboratorio(p, b.dataset.pf, data.filter(r=>r.fecha===b.dataset.pf)));
@@ -543,7 +547,7 @@ async function modalLab(p, fechaLab=null, previos=[]){
       <div class="fields"><label class="f">Fecha del análisis<input name="fecha" type="date" required value="${fechaLab||hoy()}"></label>
       <label class="f">Buscar determinación<input id="qdet" placeholder="ej. ferritina, TSH…"></label></div>
       <p class="muted" style="margin:0">Completá solo los valores que vinieron en el análisis. Los vacíos se ignoran.</p>
-      <div id="dets">${grupos.map(g=>`<div class="labgroup" data-g="${esc(g)}"><h3>${esc(g)}</h3>${dets.filter(d=>d.grupo===g).map(d=>`<div class="labrow" data-n="${esc(d.nombre.toLowerCase())}"><span>${esc(d.nombre)} <span class="rng">${esc(d.unidad||"")}</span></span>${d.calculada?`<input type="text" readonly data-calc="${esc(d.clave||"")}" data-num="${esc(d.calc_num||"")}" data-den="${esc(d.calc_den||"")}" value="${prev[d.id]?.valor??""}" placeholder="automático" title="Se calcula solo" style="background:var(--surface2);font-weight:700">`:`<input type="number" step="any" inputmode="decimal" data-d="${d.id}" data-clave="${esc(d.clave||"")}" value="${prev[d.id]?.valor??""}" placeholder="valor">`}<span class="rng">${d.ref_min!=null||d.ref_max!=null?`${d.ref_min??"…"}–${d.ref_max??"…"}`:""}</span></div>`).join("")}</div>`).join("")}</div>
+      <div id="dets">${grupos.map(g=>`<div class="labgroup" data-g="${esc(g)}"><h3>${esc(g)}</h3>${dets.filter(d=>d.grupo===g).map(d=>`<div class="labrow" data-n="${esc(d.nombre.toLowerCase())}"><span>${esc(d.nombre)} <span class="rng">${esc(d.unidad||"")}</span></span>${d.calculada?`<input type="text" readonly data-calc="${esc(d.clave||"")}" data-num="${esc(d.calc_num||"")}" data-den="${esc(d.calc_den||"")}" value="${prev[d.id]?.valor??""}" placeholder="automático" title="Se calcula solo" style="background:var(--surface2);font-weight:700">`:(d.cualitativa?`<select data-d="${d.id}" data-clave="${esc(d.clave||"")}"><option value=""></option><option value="0" ${prev[d.id]&&Number(prev[d.id].valor)===0?"selected":""}>No reactivo</option><option value="1" ${prev[d.id]&&Number(prev[d.id].valor)!==0?"selected":""}>Reactivo</option></select>`:`<input type="number" step="any" inputmode="decimal" data-d="${d.id}" data-clave="${esc(d.clave||"")}" value="${prev[d.id]?.valor??""}" placeholder="valor">`)}<span class="rng">${d.ref_min!=null||d.ref_max!=null?`${d.ref_min??"…"}–${d.ref_max??"…"}`:""}</span></div>`).join("")}</div>`).join("")}</div>
       <div class="row">${fechaLab?`<button type="button" class="btn danger" id="bdell">Eliminar este análisis</button>`:""}<button class="btn pri right" type="submit">Guardar laboratorio</button></div>
     </form>`);
   const calcIndices = () => document.querySelectorAll('#dets [data-calc]').forEach(out => {
@@ -554,7 +558,7 @@ async function modalLab(p, fechaLab=null, previos=[]){
   if(fechaLab) $("#bdell").onclick = async () => { if(!(await confirmar("¿Eliminar todos los valores de este análisis?"))) return; const { error } = await sb.from("resultados").delete().eq("paciente_id",p.id).eq("fecha",fechaLab); if(error) return fail(error); cerrarModal(); toast("Análisis eliminado"); render(); };
   $("#fl").onsubmit = async e => { e.preventDefault();
     const f = new FormData(e.target).get("fecha");
-    const filas = [...document.querySelectorAll("#dets input[data-d]")].filter(i=>i.value!=="").map(i=>({ paciente_id:p.id, determinacion_id:i.dataset.d, fecha:f, valor:Number(i.value) }));
+    const filas = [...document.querySelectorAll("#dets [data-d]")].filter(i=>i.value!=="").map(i=>({ paciente_id:p.id, determinacion_id:i.dataset.d, fecha:f, valor:Number(i.value) }));
     if(!filas.length) return toast("No cargaste ningún valor.");
     if(fechaLab){ const r = await sb.from("resultados").delete().eq("paciente_id",p.id).eq("fecha",fechaLab); if(r.error) return fail(r.error); }
     const { error } = await sb.from("resultados").insert(filas); if(error) return fail(error);
@@ -562,11 +566,12 @@ async function modalLab(p, fechaLab=null, previos=[]){
   };
 }
 async function tabEvolucion(c, p){
+  await cargarCualitativas();
   const { data } = await sb.from("v_resultados").select("*").eq("paciente_id", p.id).order("fecha");
   if(!data.length){ c.innerHTML = `<div class="card empty">Cuando haya laboratorios cargados, acá vas a ver cómo evolucionó cada valor.</div>`; return; }
   const porDet = {}; data.forEach(r => (porDet[r.determinacion] ??= []).push(r));
   const orden = Object.values(porDet).sort((a,b)=>a[0].orden-b[0].orden);
-  c.innerHTML = `<div class="row" style="margin-bottom:8px"><p class="muted" style="margin:0;flex:1">Cada gráfico muestra los valores de una determinación en el tiempo. La franja verde es el rango óptimo; las líneas punteadas, el rango de referencia.</p><button class="btn" id="bprevo">Imprimir evolución</button></div><div class="evo">${orden.map(rs=>`<div class="card"><div class="row" style="margin-bottom:6px"><b>${esc(rs[0].determinacion)}</b><span class="pill ${estadoClase(rs.at(-1).estado)} right">${esc(rs.at(-1).estado)}</span></div><div class="muted" style="font-size:13px;margin-bottom:6px">Último: <b style="color:var(--ink)">${num(rs.at(-1).valor)}</b> ${esc(rs[0].unidad||"")} · ${fecha(rs.at(-1).fecha)}</div>${grafico(rs)}</div>`).join("")}</div>`;
+  c.innerHTML = `<div class="row" style="margin-bottom:8px"><p class="muted" style="margin:0;flex:1">Cada gráfico muestra los valores de una determinación en el tiempo. La franja verde es el rango óptimo; las líneas punteadas, el rango de referencia.</p><button class="btn" id="bprevo">Imprimir evolución</button></div><div class="evo">${orden.map(rs=>`<div class="card"><div class="row" style="margin-bottom:6px"><b>${esc(rs[0].determinacion)}</b><span class="pill ${estadoClase(rs.at(-1).estado)} right">${esc(rs.at(-1).estado)}</span></div><div class="muted" style="font-size:13px;margin-bottom:6px">Último: <b style="color:var(--ink)">${valorTxt(rs.at(-1))}</b> ${esc(rs[0].unidad||"")} · ${fecha(rs.at(-1).fecha)}</div>${grafico(rs)}</div>`).join("")}</div>`;
   $("#bprevo").onclick = () => imprimirEvolucion(p, orden);
 }
 function grafico(rs){
