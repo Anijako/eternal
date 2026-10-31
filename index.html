@@ -2,6 +2,8 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Eternal Secret</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -30,6 +32,7 @@
   --ok:#6FCB9F; --ok-soft:#1E3529; --warn:#E8B655; --warn-soft:#3A2E17; --bad:#F2928A; --bad-soft:#3D2120; --info:#8DB4EC; --info-soft:#1D2A3D;
   color-scheme:dark; } }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;height:100%}
 body{background:var(--bg);color:var(--ink);font:16px/1.45 var(--body);-webkit-text-size-adjust:100%}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -150,6 +153,10 @@ td.num,th.num{text-align:right}
 <body>
 <div id="root"></div>
 <script>
+const APP_VERSION = "2026-10-31b";
+async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
+  if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
+chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
 const SUPABASE_URL = "https://fqkimypjlxdsytcvoyal.supabase.co";
 const SUPABASE_KEY = "sb_publishable_dVJpG6Ib7UjwtWg-aX3mNw_UrLpKF0U";
 if(typeof supabase==="undefined"){ document.getElementById("root").innerHTML='<div style="max-width:380px;margin:20vh auto;padding:16px;font-family:sans-serif;text-align:center"><h2>Sin conexión</h2><p>No se pudo cargar la app. Revisá que el iPad tenga internet y volvé a abrirla.</p><button onclick="location.reload()" style="padding:12px 20px;font-size:16px">Reintentar</button></div>'; throw new Error("sin supabase"); }
@@ -608,45 +615,59 @@ async function modalProducto(p){
 
 async function modalCompra(){
   const prods = (await catalogo("productos", true)).filter(x=>x.activo);
-  if(!prods.length){ toast("Primero registrá el producto con “+ Registrar producto”."); return; }
   const [{ data: ult }, { data: provs }] = await Promise.all([
     sb.from("lotes").select("numero").gte("numero",200).order("numero",{ascending:false}).limit(1),
     sb.from("lotes").select("proveedor").not("proveedor","is",null).limit(500)
   ]);
   const proximo = ult?.length ? ult[0].numero + 1 : 200;
   const proveedores = [...new Set((provs||[]).map(x=>x.proveedor))].sort();
-  const opciones = `<option value="">— elegir producto —</option>` + ["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(x=>x.linea===l).map(x=>`<option value="${x.id}" data-c="${x.costo??""}">${esc(prodLabel(x))}</option>`).join("")+`</optgroup>`).join("");
+  let opciones = `<option value="">— elegir producto —</option>` + ["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(x=>x.linea===l).map(x=>`<option value="${x.id}" data-c="${x.costo??""}" data-p="${x.precio??""}">${esc(prodLabel(x))}</option>`).join("")+`</optgroup>`).join("");
   abrirModal("Cargar compra", `<form id="fc" class="grid">
     <div class="card" style="background:var(--accent-soft);border-color:transparent"><div class="row"><div><div class="muted" style="font-size:13px;font-weight:600">LOTE DE ESTA COMPRA</div><div style="font-family:var(--display);font-size:28px" id="lnum">${lote4(proximo)}</div></div>
       <label class="right" style="display:flex;align-items:center;gap:8px;font-size:14px"><input type="checkbox" id="lprev" style="width:auto;min-height:0"> Es stock anterior (lote previo a L-0200)</label></div>
       <label class="f" id="lprevbox" hidden style="margin-top:8px">Número de lote anterior (1 a 199)<input id="lprevnum" type="number" min="1" max="199" inputmode="numeric"></label></div>
     <div class="fields">
       <label class="f">Fecha de compra<input name="fecha" type="date" required value="${hoy()}"></label>
-      <label class="f">Proveedor<input name="proveedor" list="provl" required><datalist id="provl">${proveedores.map(p=>`<option>${esc(p)}</option>`).join("")}</datalist></label>
+      <label class="f">Proveedor (uno por compra)<input name="proveedor" list="provl" required autocomplete="off"><datalist id="provl">${proveedores.map(p=>`<option>${esc(p)}</option>`).join("")}</datalist></label>
       <label class="f">N° de factura (opcional)<input name="nro_factura"></label>
     </div>
-    <div><h3>Productos de la compra</h3><div id="cits"></div><button type="button" class="btn ghost" id="caddp">+ Agregar otro producto</button></div>
-    <label style="display:flex;align-items:center;gap:8px;font-size:14px"><input type="checkbox" id="cupd" checked style="width:auto;min-height:0"> Actualizar el costo de cada producto con el de esta compra</label>
+    <div><h3>Productos de esta compra</h3><p class="muted" style="margin:0 0 6px;font-size:13px">Todos quedan en el mismo lote y con el mismo proveedor. El vencimiento se completa solo a 6 meses de la fecha de compra (podés cambiarlo).</p><div id="cits"></div>
+      <div class="row"><button type="button" class="btn ghost" id="caddp">+ Agregar otro producto</button><button type="button" class="btn ghost" id="cnewp">+ Producto nuevo (no registrado)</button></div>
+      <div id="cnewbox" hidden class="card" style="margin-top:8px"><div class="fields"><label class="f">Nombre del producto nuevo<input id="cnn"></label><label class="f">Línea<select id="cnl"><option>Funcional</option><option>Estética</option></select></label></div><div class="row" style="margin-top:8px"><button type="button" class="btn" id="cnc">Cancelar</button><button type="button" class="btn pri right" id="cnok">Registrar y agregar</button></div></div></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px"><input type="checkbox" id="cupd" checked style="width:auto;min-height:0"> Actualizar el costo de cada producto con el de esta compra (el precio de venta cargado también se actualiza)</label>
     <div class="row"><span class="muted" id="cres"></span><button class="btn pri right" type="submit">Guardar compra y ver etiquetas</button></div></form>`);
   const box = $("#cits");
   const resumen = () => { let u=0, t=0; box.querySelectorAll(".citem").forEach(r=>{ const q=+$(".c-cant",r).value||0; u+=q; t+=q*(+$(".c-cost",r).value||0); }); $("#cres").textContent = `${u} unidades · ${u} etiquetas · costo ${pesos(t)}`; };
-  const agregar = () => {
-    box.insertAdjacentHTML("beforeend", `<div class="itemrow citem" style="grid-template-columns:1fr 80px 110px 100px 40px">
+  const agregar = (prodId) => {
+    box.insertAdjacentHTML("beforeend", `<div class="itemrow citem" style="grid-template-columns:minmax(160px,1fr) 70px 105px 105px 90px 40px">
       <label class="f">Producto<select class="c-prod" required>${opciones}</select></label>
       <label class="f">Cant.<input class="c-cant" type="number" min="1" step="1" inputmode="numeric" required value="1"></label>
       <label class="f">Costo unit. $<input class="c-cost" type="number" step="any" inputmode="decimal"></label>
+      <label class="f">Precio venta $<input class="c-pv" type="number" step="any" inputmode="decimal"></label>
       <label class="f">Vto. (MM/AA)<input class="c-vto" inputmode="numeric" placeholder="MM/AA" maxlength="5" required value="${sumarMeses($("#fc [name=fecha]").value||hoy(),6)}"></label>
       <button type="button" class="iconbtn x" title="Quitar">×</button></div>`);
     const r = box.lastElementChild;
     mascaraMMAA($(".c-vto",r)); $(".c-vto",r).oninput = () => { $(".c-vto",r).dataset.tocado = 1; };
     $(".c-vto",r).addEventListener("input", () => r.querySelector(".c-vto").dataset.tocado = 1);
-    $(".c-prod",r).onchange = e => { const c=e.target.selectedOptions[0]?.dataset.c; if(c && !$(".c-cost",r).value) $(".c-cost",r).value=c; resumen(); };
+    $(".c-prod",r).onchange = e => { const o=e.target.selectedOptions[0]; if(o?.dataset.c) $(".c-cost",r).value=o.dataset.c; if(o?.dataset.p) $(".c-pv",r).value=o.dataset.p; resumen(); };
+    if(prodId){ $(".c-prod",r).value = prodId; $(".c-prod",r).onchange({target:$(".c-prod",r)}); }
     $(".c-cant",r).oninput = $(".c-cost",r).oninput = resumen;
     $(".x",r).onclick = () => { if(box.children.length>1){ r.remove(); resumen(); } };
     resumen();
   };
   agregar();
-  $("#caddp").onclick = agregar;
+  $("#caddp").onclick = () => agregar();
+  $("#cnewp").onclick = () => { $("#cnewbox").hidden = false; $("#cnn").focus(); };
+  $("#cnc").onclick = () => { $("#cnewbox").hidden = true; };
+  $("#cnok").onclick = async () => { const nombre = $("#cnn").value.trim(); if(!nombre) return toast("Escribí el nombre del producto.");
+    const { data: np, error } = await sb.from("productos").insert({ nombre, linea: $("#cnl").value }).select("id,codigo,nombre,linea").single();
+    if(error) return fail(error.code==="23505"?"Ya existe un producto con ese nombre en esa línea":error);
+    const opt = `<option value="${np.id}" data-c="" data-p="">${esc(cod6(np.codigo)+" · "+np.nombre)}</option>`;
+    box.querySelectorAll(".c-prod").forEach(sel => sel.querySelector(`optgroup[label="${np.linea}"]`)?.insertAdjacentHTML("beforeend", opt));
+    opciones = opciones.replace(`<optgroup label="${np.linea}">`, `<optgroup label="${np.linea}">`+opt);
+    const vacia = [...box.querySelectorAll(".c-prod")].find(sel=>!sel.value);
+    if(vacia) vacia.value = np.id; else agregar(np.id);
+    $("#cnn").value = ""; $("#cnewbox").hidden = true; cache.productos = null; toast(`Producto registrado con el código ${cod6(np.codigo)}`); };
   $("#fc [name=fecha]").onchange = e => { box.querySelectorAll(".c-vto").forEach(i=>{ if(!i.dataset.tocado) i.value = sumarMeses(e.target.value||hoy(),6); }); };
   $("#lprev").onchange = e => { $("#lprevbox").hidden = !e.target.checked; $("#lnum").textContent = e.target.checked ? "L-0___" : lote4(proximo); if(e.target.checked) $("#lprevnum").focus(); };
   $("#lprevnum").oninput = e => { const n=+e.target.value; $("#lnum").textContent = n>0&&n<200 ? lote4(n) : "L-0___"; };
@@ -658,7 +679,8 @@ async function modalCompra(){
     for(const r of box.querySelectorAll(".citem")){
       const venc = mmaaAFecha($(".c-vto",r).value); if(!venc) return toast("Revisá el vencimiento: tiene que ser MM/AA, por ejemplo 04/27.");
       const cant = +$(".c-cant",r).value; if(!(cant>=1 && Number.isInteger(cant))) return toast("La cantidad tiene que ser un número entero.");
-      items.push({ producto_id: $(".c-prod",r).value, cantidad: cant, costo_unitario: $(".c-cost",r).value || null, vencimiento: venc, actualizar_costo: $("#cupd").checked });
+      if(!$(".c-prod",r).value) return toast("Elegí el producto en cada renglón (o quitá el renglón vacío).");
+      items.push({ producto_id: $(".c-prod",r).value, cantidad: cant, costo_unitario: $(".c-cost",r).value || null, precio_venta: $(".c-pv",r).value || null, vencimiento: venc, actualizar_costo: $("#cupd").checked });
     }
     const btn = e.target.querySelector("[type=submit]"); btn.disabled = true;
     const { data, error } = await sb.rpc("registrar_compra", { p_fecha: f.fecha, p_proveedor: f.proveedor.trim(), p_factura: f.nro_factura || null, p_numero: numero, p_items: items });
