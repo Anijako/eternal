@@ -211,7 +211,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31v";
+const APP_VERSION = "2026-10-31w";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -646,7 +646,7 @@ async function vPaciente(v, id, tab){
   const datos = [["DNI",p.dni],["Edad",p.edad!=null?p.edad+" años":null],["Sexo",p.sexo],["Nacimiento",p.fecha_nacimiento?fecha(p.fecha_nacimiento):null],["Obra social",[p.obra_social,p.nro_afiliado].filter(Boolean).join(" · ")],["Teléfono",p.telefono],["Email",p.email]];
   v.innerHTML = `
     <a href="#/pacientes" class="btn ghost" style="padding-left:0">← Pacientes</a>
-    <div class="row"><h1>${esc(p.nombre)}</h1>${areaPill(p.area)}<button class="btn right" id="bedit">Editar datos</button></div>
+    <div class="row"><h1>${esc(p.nombre)}</h1>${areaPill(p.area)}<button class="btn right" id="bunif">Unificar duplicados</button><button class="btn" id="bedit">Editar datos</button></div>
     <p class="sub">${p.cantidad_visitas} visitas · última ${fechaCorta(p.ultima_visita)}${p.ultimo_laboratorio?" · último laboratorio "+fechaCorta(p.ultimo_laboratorio):""}</p>
     <div class="grid g2">
       <div class="card"><h3 style="margin-top:0">Datos</h3><table>${datos.map(([k,x])=>`<tr><th style="width:40%">${k}</th><td>${x?esc(x):`<span class="muted">—</span>`}</td></tr>`).join("")}</table>${p.nombres_anteriores?`<p class="muted" style="font-size:13px;margin:10px 0 0">En la facturación figuraba como: ${esc(p.nombres_anteriores)}</p>`:""}</div>
@@ -658,6 +658,7 @@ async function vPaciente(v, id, tab){
     <div class="tabs">${[["visitas","Visitas"],["labs","Laboratorios"],["evo","Evolución"]].map(([k,t])=>`<button class="tab ${tab===k?"on":""}" data-t="${k}">${t}</button>`).join("")}</div>
     <div id="tabc"></div>`;
   $("#bedit").onclick = () => modalPaciente(p);
+  $("#bunif").onclick = () => modalUnificar(p);
   document.querySelectorAll(".tab").forEach(b => b.onclick = () => { location.hash = `#/p/${id}/${b.dataset.t}`; });
   const c = $("#tabc");
   if(tab==="visitas") await tabVisitas(c, p);
@@ -851,6 +852,42 @@ function imprimirEvolucion(p, porDet){
       <div class="inf-ev-r">Ref. ${rangoTxt(u.rmin,u.rmax)} · Óptimo ${rangoTxt(u.omin,u.omax)}</div>${grafico(rs)}
       <table class="inf-ev-t">${rs.map(r=>`<tr><td>${fecha(r.fecha)}</td><td class="num"><b>${valorTxt(r)}</b></td><td>${punto(r.estado)} ${semaforoTxt(r.estado)}</td></tr>`).join("")}</table></div>`; }).join("")}</div>` + leyendaInforme();
   imprimirHTML(html, "print-doc", "@page{size:A4;margin:12mm 13mm}", `Evolución laboratorio ${p.nombre}`);
+}
+
+/* ---------- UNIFICAR PACIENTES ---------- */
+async function modalUnificar(p){
+  const sinTilde = x => (x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+  const tokens = sinTilde(p.nombre).split(/\s+/).filter(t=>t.length>=3);
+  abrirModal("Unificar pacientes duplicados", `<div class="grid">
+    <div class="card" style="background:var(--accent-soft);border-color:transparent"><div class="muted" style="font-size:13px;font-weight:600">SE QUEDA ESTE PACIENTE (el correcto)</div><b style="font-size:18px">${esc(p.nombre)}</b>${p.dni?` <span class="muted">· DNI ${esc(p.dni)}</span>`:""}
+      <p style="margin:6px 0 0;font-size:14px">Marcá los registros duplicados (nombre mal escrito, cortado, etc.). Sus visitas, laboratorios y turnos pasan a este paciente; los datos que a este le falten (DNI, teléfono, nacimiento…) se completan con los del duplicado, y el nombre viejo queda guardado como “nombre anterior”. Después el duplicado se borra.</p></div>
+    <label class="f">Buscar otros pacientes<div class="search">${ICON.search}<input id="uq" value="${esc((p.nombre||"").split(/\s+/)[0]||"")}" autocomplete="off"></div></label>
+    <div id="ures"></div>
+    <div class="row"><span class="muted" id="ucont"></span><button class="btn pri right" id="uok" disabled>Unificar</button></div></div>`);
+  const elegidos = new Map();
+  const pintar = async () => {
+    const q = $("#uq").value.trim().replace(/[%,()]/g,"");
+    let qy = sb.from("v_pacientes").select("id,nombre,dni,telefono,cantidad_visitas,ultima_visita,ultimo_laboratorio,nombres_anteriores").neq("id", p.id).order("nombre").limit(40);
+    if(q.length>=2) qy = qy.or(`nombre.ilike.%${q}%,dni.ilike.%${q}%,nombres_anteriores.ilike.%${q}%`);
+    const { data } = await qy;
+    const parecido = x => { const t = sinTilde(x.nombre).split(/\s+/); return tokens.filter(k=>t.some(w=>w.startsWith(k.slice(0,4)))).length; };
+    const L = (data||[]).sort((a,b)=>parecido(b)-parecido(a));
+    $("#ures").innerHTML = L.length ? `<div class="card tight"><ul class="list">${L.map(x=>`<li><label class="item" style="cursor:pointer"><input type="checkbox" data-u="${x.id}" ${elegidos.has(x.id)?"checked":""} style="width:22px;height:22px;min-height:0;flex:none">
+      <div class="main"><div class="t">${esc(x.nombre)}${parecido(x)>=Math.min(2,tokens.length)?' <span class="pill s-warn">parecido</span>':""}</div><div class="s">${x.dni?"DNI "+esc(x.dni):"sin DNI"} · ${x.cantidad_visitas} visitas · última ${fechaCorta(x.ultima_visita)}${x.ultimo_laboratorio?" · tiene laboratorios":""}${x.telefono?" · "+esc(x.telefono):""}</div></div></label></li>`).join("")}</ul></div>` : `<p class="muted">No hay otros pacientes con ese nombre.</p>`;
+    $("#ures").querySelectorAll("[data-u]").forEach(ch=>ch.onchange=()=>{ const x=L.find(y=>y.id===ch.dataset.u); ch.checked ? elegidos.set(x.id,x) : elegidos.delete(x.id); actualizar(); });
+  };
+  const actualizar = () => { const n = elegidos.size, v = [...elegidos.values()].reduce((a,x)=>a+Number(x.cantidad_visitas||0),0);
+    $("#ucont").textContent = n ? `${n} duplicado${n>1?"s":""} · ${v} visitas a mover` : ""; $("#uok").disabled = !n; $("#uok").textContent = n ? `Unificar ${n} en ${p.nombre}` : "Unificar"; };
+  let tm; $("#uq").oninput = () => { clearTimeout(tm); tm = setTimeout(pintar, 250); };
+  await pintar();
+  $("#uok").onclick = async () => {
+    const nombres = [...elegidos.values()].map(x=>x.nombre).join(", ");
+    if(!(await confirmar(`¿Unificar ${nombres} dentro de ${p.nombre}? Los duplicados se borran (su historial pasa a ${p.nombre}).`))) return;
+    $("#uok").disabled = true;
+    const { data, error } = await sb.rpc("unificar_pacientes", { p_destino: p.id, p_origenes: [...elegidos.keys()] });
+    if(error){ $("#uok").disabled = false; return fail(error); }
+    cerrarModal(); toast(`Listo: se movieron ${data.visitas} visitas, ${data.laboratorios} valores de laboratorio y ${data.turnos} turnos`); render();
+  };
 }
 
 /* ---------- LABORATORIOS ---------- */
