@@ -158,7 +158,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 }
 /* informes */
 .sem{display:inline-block;width:11px;height:11px;border-radius:50%;vertical-align:-1px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-#print.print-doc{--ink:#1a1a1a;--ink2:#555;--line:#d9d9d9;--surface:#fff;--surface2:#f2f2f2;--accent:#5B2A4C;--ok-soft:#E3F2EA;color:#1a1a1a;font:10pt/1.35 var(--body);background:#fff}
+.print-doc{--ink:#1a1a1a;--ink2:#555;--line:#d9d9d9;--surface:#fff;--surface2:#f2f2f2;--accent:#5B2A4C;--ok-soft:#E3F2EA;color:#1a1a1a;font:10pt/1.35 var(--body);background:#fff}
 .inf-head{display:flex;align-items:center;gap:14px;border-bottom:2px solid #5B2A4C;padding-bottom:8px;margin-bottom:8px}
 .inf-head img{width:62px;height:62px;object-fit:contain}
 .inf-marca{font-family:var(--display);font-size:17pt;color:#5B2A4C;line-height:1}
@@ -200,7 +200,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31m";
+const APP_VERSION = "2026-10-31o";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -523,7 +523,33 @@ function cabeceraInforme(p, titulo, sub){
     <section class="inf-pac"><div><span>Paciente</span><b>${esc(p.nombre)}</b></div>${p.dni?`<div><span>DNI</span><b>${esc(p.dni)}</b></div>`:""}${p.edad!=null?`<div><span>Edad</span><b>${p.edad} años</b></div>`:""}${p.sexo?`<div><span>Sexo</span><b>${esc(p.sexo)}</b></div>`:""}${p.obra_social?`<div><span>Obra social</span><b>${esc(p.obra_social)}</b></div>`:""}</section>`;
 }
 const leyendaInforme = () => `<footer class="inf-ley">${punto("Óptimo")} Aceptable ${punto("Fuera del óptimo")} Precaución (dentro de referencia, fuera del óptimo) ${punto("Alto")} Fuera de rango ${punto("")} Sin rango cargado<div class="inf-firma">${DRA}</div></footer>`;
-function imprimirHTML(html, clase, pageCss){
+let PDF_LISTO = null, PDF_NOMBRE = "", PDF_GEN = 0;
+function cargarScript(src){ return new Promise((ok,err)=>{ if([...document.scripts].some(x=>x.src===src)) return ok(); const t=document.createElement("script"); t.src=src; t.onload=ok; t.onerror=err; document.head.appendChild(t); }); }
+async function prepararPDF(html, landscape, nombre){
+  const gen = ++PDF_GEN; PDF_LISTO = null; PDF_NOMBRE = nombre;
+  const btn = document.getElementById("prshare"); if(btn){ btn.disabled = true; btn.textContent = "Preparando PDF…"; }
+  try{
+    await cargarScript("https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js");
+    const caja = document.createElement("div"); caja.className = "print-doc";
+    caja.style.cssText = `width:${landscape?1040:715}px;background:#fff;padding:0`;
+    caja.innerHTML = LOGO_DATA ? html.replaceAll('src="logo.png"', `src="${LOGO_DATA}"`) : html;
+    const blob = await html2pdf().set({ margin:[10,10,10,10], image:{ type:"jpeg", quality:0.95 }, html2canvas:{ scale:2, useCORS:true, backgroundColor:"#ffffff" },
+      jsPDF:{ unit:"mm", format:"a4", orientation: landscape ? "landscape" : "portrait" }, pagebreak:{ mode:["css","legacy"], avoid:["tr",".inf-ev"] } }).from(caja).outputPdf("blob");
+    if(gen !== PDF_GEN) return;
+    PDF_LISTO = new File([blob], nombre.replace(/[\\/:*?"<>|]/g,"") + ".pdf", { type:"application/pdf" });
+    if(btn){ btn.disabled = false; btn.textContent = "Compartir PDF"; }
+  }catch(e){ console.error(e); if(btn){ btn.disabled = false; btn.textContent = "Compartir PDF"; } }
+}
+async function compartirPDF(){
+  if(!PDF_LISTO) return toast("El PDF se está preparando, tocá de nuevo en un segundo.");
+  const datos = { files:[PDF_LISTO], title: PDF_NOMBRE };
+  if(navigator.canShare && navigator.canShare(datos)){
+    try{ await navigator.share(datos); }catch(e){ if(e.name!=="AbortError") toast("No se pudo compartir: " + e.message); }
+  } else {
+    const a = document.createElement("a"); a.href = URL.createObjectURL(PDF_LISTO); a.download = PDF_LISTO.name; document.body.appendChild(a); a.click(); a.remove();
+  }
+}
+function imprimirHTML(html, clase, pageCss, nombre){
   // Muestra una vista previa con botón "Imprimir": Safari solo deja imprimir si se toca un botón directamente.
   let zona = document.getElementById("print"); if(!zona){ zona = document.createElement("div"); zona.id = "print"; document.body.appendChild(zona); }
   zona.className = clase; zona.innerHTML = html; zona.scrollTop = 0;
@@ -531,12 +557,15 @@ function imprimirHTML(html, clase, pageCss){
   st.textContent = pageCss;
   let bar = document.getElementById("prbar");
   if(!bar){ bar = document.createElement("div"); bar.id = "prbar";
-    bar.innerHTML = `<button class="btn sec" id="prcerrar">← Volver</button><span style="flex:1;font-weight:600">Vista previa</span><button class="btn sec" id="prpdf">Abrir aparte (PDF / compartir)</button><button class="btn" id="prok">Imprimir</button>`;
+    bar.innerHTML = `<button class="btn sec" id="prcerrar">← Volver</button><span style="flex:1;font-weight:600">Vista previa</span><button class="btn sec" id="prpdf">Abrir aparte</button><button class="btn sec" id="prshare">Compartir PDF</button><button class="btn" id="prok">Imprimir</button>`;
     document.body.appendChild(bar);
     $("#prok").onclick = () => { let ok = false; try{ ok = document.execCommand("print", false, null); }catch(e){} if(!ok) window.print(); };
     $("#prpdf").onclick = abrirAparte;
+    $("#prshare").onclick = compartirPDF;
     $("#prcerrar").onclick = () => document.body.classList.remove("preview"); }
   document.body.classList.add("preview");
+  const sh = document.getElementById("prshare");
+  if(clase === "print-doc"){ sh.hidden = false; prepararPDF(html, /landscape/.test(pageCss), nombre || "Informe Eternal"); } else sh.hidden = true;
 }
 async function imprimirPlanilla(dets){
   const { data: esp } = await sb.from("rangos_especiales").select("*");
@@ -562,14 +591,14 @@ async function imprimirPlanilla(dets){
       <tr><th>desde</th><th>hasta</th><th>desde</th><th>hasta</th></tr></thead>
       ${grupos.map(g=>`<tbody><tr class="xl-grp"><td colspan="7">${esc(g)}</td></tr>${L.filter(d=>d.grupo===g).map(filaDet).join("")}</tbody>`).join("")}</table>
     <p class="inf-mut" style="margin-top:6px">Los números impresos son los rangos que ya están cargados en la app; las celdas vacías son para completar. “Mayor a” un número: completar solo “desde”. “Menor a”: completar solo “hasta”. Los índices (Apo B / Apo A y TG / HDL) los calcula la app.</p>`;
-  imprimirHTML(html, "print-doc", "@page{size:A4 landscape;margin:9mm 10mm}");
+  imprimirHTML(html, "print-doc", "@page{size:A4 landscape;margin:9mm 10mm}", "Planilla de rangos de laboratorio");
 }
 function imprimirLaboratorio(p, f, rs){
   const grupos = [...new Set(rs.map(r=>r.grupo))];
   const fase = rs.find(r=>r.fase)?.fase;
   const html = cabeceraInforme(p, "Informe de laboratorio", "Análisis del " + fecha(f) + (fase ? " · " + fase : "")) +
     `<table class="inf-tab"><thead><tr><th>Determinación</th><th class="num">Resultado</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Estado</th></tr></thead>${grupos.map(g=>`<tbody><tr class="inf-grp"><td colspan="6">${esc(g)}</td></tr>${rs.filter(r=>r.grupo===g).map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${valorTxt(r)}</b></td><td>${esc(r.unidad||"")}</td><td>${rangoTxt(r.rmin,r.rmax)}${r.rango_categoria?`<div class="inf-mut">${esc(r.rango_categoria)}</div>`:""}</td><td>${rangoTxt(r.omin,r.omax)}</td><td class="inf-est">${punto(r.estado)} ${semaforoTxt(r.estado)}</td></tr>`).join("")}</tbody>`).join("")}</table>` + leyendaInforme();
-  imprimirHTML(html, "print-doc", "@page{size:A4;margin:12mm 13mm}");
+  imprimirHTML(html, "print-doc", "@page{size:A4;margin:12mm 13mm}", `Laboratorio ${p.nombre} ${fecha(f).replaceAll("/","-")}`);
 }
 function imprimirEvolucion(p, porDet){
   const fechas = [...new Set(porDet.flat().map(r=>r.fecha))].sort();
@@ -577,7 +606,7 @@ function imprimirEvolucion(p, porDet){
     `<div class="inf-evo">${porDet.map(rs=>{ const u=rs.at(-1); return `<div class="inf-ev"><div class="inf-ev-h"><b>${esc(u.determinacion)}</b><span>${esc(u.unidad||"")}</span></div>
       <div class="inf-ev-r">Ref. ${rangoTxt(u.rmin,u.rmax)} · Óptimo ${rangoTxt(u.omin,u.omax)}</div>${grafico(rs)}
       <table class="inf-ev-t">${rs.map(r=>`<tr><td>${fecha(r.fecha)}</td><td class="num"><b>${valorTxt(r)}</b></td><td>${punto(r.estado)} ${semaforoTxt(r.estado)}</td></tr>`).join("")}</table></div>`; }).join("")}</div>` + leyendaInforme();
-  imprimirHTML(html, "print-doc", "@page{size:A4;margin:12mm 13mm}");
+  imprimirHTML(html, "print-doc", "@page{size:A4;margin:12mm 13mm}", `Evolución laboratorio ${p.nombre}`);
 }
 
 /* ---------- LABORATORIOS ---------- */
