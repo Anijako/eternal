@@ -123,6 +123,28 @@ td.num,th.num{text-align:right}
 .bar span{display:block;height:100%;background:var(--accent)}
 .right{margin-left:auto}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+/* etiquetas */
+.etq{display:flex;align-items:center;gap:2.2mm;overflow:hidden;color:#111;font-family:var(--body);box-sizing:border-box}
+.etq img{flex:none;object-fit:contain}
+.etq-t{min-width:0;line-height:1.15}
+.etq-n{font-weight:700;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.etq-c{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;letter-spacing:.02em}
+.etq-v{color:#444}
+.etq-a4{width:63.5mm;height:38.1mm;padding:2.5mm 3mm}
+.etq-a4 img{width:20mm;height:20mm}.etq-a4 .etq-n{font-size:9.5pt}.etq-a4 .etq-l{font-size:8.5pt;margin-top:1mm}.etq-a4 .etq-c{font-size:12.5pt;margin-top:.5mm}.etq-a4 .etq-v{font-size:7.5pt}
+.etq-rollo{width:50mm;height:30mm;padding:2mm 2.2mm}
+.etq-rollo img{width:15mm;height:15mm}.etq-rollo .etq-n{font-size:8pt}.etq-rollo .etq-l{font-size:7.5pt;margin-top:.6mm}.etq-rollo .etq-c{font-size:10.5pt}.etq-rollo .etq-v{font-size:6.5pt}
+#print{display:none}
+@media print{
+  body.printing{background:#fff}
+  body.printing > *:not(#print){display:none!important}
+  body.printing #print{display:block}
+  #print.print-a4{display:grid!important;grid-template-columns:repeat(3,63.5mm);column-gap:2.5mm;grid-auto-rows:38.1mm}
+  #print.print-a4 .etq:nth-child(21n){break-after:page}
+  #print.print-rollo .etq{break-after:page}
+  #print .etq{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+.login .logo{display:block;width:120px;height:120px;margin:0 auto 8px}
 </style>
 </head>
 <body>
@@ -163,7 +185,7 @@ async function catalogo(nombre, force=false){
   let q;
   if(nombre==="determinaciones") q = sb.from("determinaciones").select("*").order("orden");
   if(nombre==="tratamientos") q = sb.from("tratamientos").select("*").order("nombre");
-  if(nombre==="productos") q = sb.from("v_stock").select("*").order("nombre");
+  if(nombre==="productos") q = sb.from("v_inventario").select("*").order("nombre");
   const { data, error } = await q; if(error) throw error;
   return cache[nombre] = data;
 }
@@ -177,6 +199,7 @@ async function verificarAcceso(){
 function pantallaLogin(msg=""){
   $("#root").innerHTML = `
   <div class="login">
+    <img class="logo" src="logo.png" alt="Eternal Secret">
     <div class="brand">Eternal Secret<small>Consultorio</small></div>
     <div class="card">
       <form id="flog" class="grid">
@@ -264,6 +287,7 @@ async function vInicio(v){
     <h1>Hola, Dra.</h1><p class="sub">${new Date().toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"})}</p>
     <div class="search card" style="padding:0;border:none;background:none;margin-bottom:16px">${ICON.search}<input id="qhome" placeholder="Buscar paciente por apellido, nombre o DNI" autocomplete="off"></div>
     <div id="reshome"></div>
+    <div class="row" style="margin-bottom:16px"><button class="btn pri" id="hent">Entrega de producto</button><button class="btn" id="hcomp">+ Cargar compra</button></div>
     <div class="grid g3" style="margin-bottom:16px">
       <div class="card stat"><div class="n">${pesos(tot)}</div><div class="l">Facturado este mes · ${vm.length} visitas</div></div>
       <div class="card stat"><div class="n">${pesos(est)}</div><div class="l">${areaPill("Estética")} este mes</div></div>
@@ -273,9 +297,11 @@ async function vInicio(v){
       <div class="card tight"><div style="padding:14px 16px 4px" class="row"><h2 style="margin:0">Últimas visitas</h2></div>
         <ul class="list">${rec.map(r=>`<li><a class="item" href="#/p/${r.paciente_id}"><div class="main"><div class="t">${esc(r.paciente)}</div><div class="s">${fechaCorta(r.fecha)} · ${esc(r.detalle_items||r.motivo||"")}</div></div><div class="r">${areaPill(r.area)}<div class="muted">${pesos(r.total)}</div></div></a></li>`).join("")}</ul></div>
       <div class="card tight"><div style="padding:14px 16px 4px" class="row"><h2 style="margin:0">Stock que requiere atención</h2><a class="btn ghost right" href="#/stock">Ver todo</a></div>
-        ${alertas.length?`<ul class="list">${alertas.map(p=>`<li><div class="item"><div class="main"><div class="t">${esc(p.nombre)}</div><div class="s">${esc(p.linea)} · stock ${num(p.stock_actual)} · vence ${fecha(p.proximo_vencimiento)}</div></div><span class="pill ${alertaClase(p.alerta)}">${esc(p.alerta)}</span></div></li>`).join("")}</ul>`:`<div class="empty">Nada pendiente. Cargá los productos en Stock para empezar a ver alertas.</div>`}</div>
+        ${alertas.length?`<ul class="list">${alertas.map(p=>`<li><div class="item"><div class="main"><div class="t">${esc(p.nombre)}</div><div class="s">${esc(p.linea)} · <code>${p.codigo_txt}</code> · stock ${num(p.stock_actual)} · vto ${mmaa(p.proximo_vencimiento)}</div></div><span class="pill ${alertaClase(p.alerta)}">${esc(p.alerta)}</span></div></li>`).join("")}</ul>`:`<div class="empty">Nada pendiente. Cargá los productos en Stock para empezar a ver alertas.</div>`}</div>
     </div>`;
   buscadorPacientes($("#qhome"), $("#reshome"));
+  $("#hent").onclick = () => modalEntrega(null);
+  $("#hcomp").onclick = () => modalCompra();
 }
 function buscadorPacientes(input, out){
   let t;
@@ -359,18 +385,22 @@ async function vPaciente(v, id, tab){
 async function tabVisitas(c, p){
   const { data } = await sb.from("v_visitas").select("*").eq("paciente_id", p.id).order("fecha",{ascending:false}).order("creado",{ascending:false});
   const total = data.reduce((a,x)=>a+Number(x.total||0),0);
-  c.innerHTML = `<div class="row" style="margin-bottom:10px"><span class="muted">Total facturado: <b style="color:var(--ink)">${pesos(total)}</b></span><button class="btn pri right" id="bnv">+ Nueva visita</button></div>
+  c.innerHTML = `<div class="row" style="margin-bottom:10px"><span class="muted">Total facturado: <b style="color:var(--ink)">${pesos(total)}</b></span><button class="btn right" id="bentp">Entrega de producto</button><button class="btn pri" id="bnv">+ Nueva visita</button></div>
     <div class="card tight">${data.length?`<ul class="list">${data.map(x=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left;cursor:pointer" data-v="${x.id}"><div class="main"><div class="t">${fecha(x.fecha)} ${areaPill(x.area)}</div><div class="s">${esc(x.detalle_items||x.motivo||"")}${x.observaciones?" · "+esc(x.observaciones):""}</div></div><div class="r">${pesos(x.total)}</div></button></li>`).join("")}</ul>`:`<div class="empty">Sin visitas.</div>`}</div>`;
   $("#bnv").onclick = () => modalVisita(p);
+  $("#bentp").onclick = () => modalEntrega(p);
   c.querySelectorAll("[data-v]").forEach(b => b.onclick = () => modalVisita(p, data.find(x=>x.id===b.dataset.v)));
 }
 async function modalVisita(p, visita=null){
   const [trats, prods] = await Promise.all([catalogo("tratamientos"), catalogo("productos")]);
   let items = [];
-  if(visita){ const { data } = await sb.from("visita_items").select("*").eq("visita_id", visita.id); items = data; }
-  const fila = (it={}) => `<div class="itemrow">
+  let unidadesPorItem = {};
+  if(visita){ const { data } = await sb.from("visita_items").select("*").eq("visita_id", visita.id); items = data;
+    const ids = items.filter(i=>i.producto_id).map(i=>i.id);
+    if(ids.length){ const { data: us } = await sb.from("unidades").select("codigo,visita_item_id").in("visita_item_id", ids); (us||[]).forEach(u=>(unidadesPorItem[u.visita_item_id] ??= []).push(u.codigo)); } }
+  const fila = (it={}) => `<div class="itemrow" data-prod0="${it.producto_id||""}" data-u="${esc((unidadesPorItem[it.id]||[]).join("|"))}">
       <label class="f">Tipo<select class="it-tipo">${["Tratamiento","Producto","Medicamento"].map(t=>`<option ${it.tipo===t?"selected":""}>${t}</option>`).join("")}</select></label>
-      <label class="f">Qué<select class="it-ref"></select><input class="it-desc" placeholder="Descripción libre (opcional)" value="${esc(it.descripcion)}" style="margin-top:6px"></label>
+      <label class="f">Qué<select class="it-ref"></select><input class="it-desc" placeholder="Descripción libre (opcional)" value="${esc(it.descripcion)}" style="margin-top:6px">${(unidadesPorItem[it.id]||[]).length?`<span class="muted" style="font-weight:400;font-size:12.5px">Unidades: ${(unidadesPorItem[it.id]).map(esc).join(", ")}</span>`:""}</label>
       <label class="f">Cant.<input class="it-cant" type="number" min="0" step="any" value="${it.cantidad??1}"></label>
       <label class="f">Monto $<input class="it-monto" type="number" min="0" step="any" inputmode="decimal" value="${it.monto??""}"></label>
       <button type="button" class="iconbtn x" title="Quitar">×</button></div>`;
@@ -389,7 +419,7 @@ async function modalVisita(p, visita=null){
   const box = $("#its");
   const opciones = (tipo) => tipo==="Tratamiento"
     ? `<option value="">— elegir tratamiento —</option>`+trats.filter(t=>t.activo).map(t=>`<option value="${t.id}" data-precio="${t.precio??""}">${esc(t.nombre)}${t.area?" ("+t.area+")":""}</option>`).join("")
-    : `<option value="">— elegir producto —</option>`+["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(x=>x.linea===l&&x.activo).map(x=>`<option value="${x.id}" data-precio="${x.precio??""}">${esc(x.nombre)} · stock ${num(x.stock_actual)}</option>`).join("")+`</optgroup>`).join("");
+    : `<option value="">— elegir producto —</option>`+["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(x=>x.linea===l&&x.activo).map(x=>`<option value="${x.id}" data-precio="${x.precio??""}">${esc(prodLabel(x))} · stock ${num(x.stock_actual)}</option>`).join("")+`</optgroup>`).join("");
   const cablear = (row, it={}) => {
     const tipo=$(".it-tipo",row), ref=$(".it-ref",row), monto=$(".it-monto",row), cant=$(".it-cant",row);
     const llenar = () => { ref.innerHTML = opciones(tipo.value); };
@@ -409,7 +439,8 @@ async function modalVisita(p, visita=null){
     const filas = [...box.querySelectorAll(".itemrow")].map(r => {
       const tipo=$(".it-tipo",r).value, ref=$(".it-ref",r).value||null;
       return { tipo, tratamiento_id: tipo==="Tratamiento"?ref:null, producto_id: tipo!=="Tratamiento"?ref:null,
-        descripcion: $(".it-desc",r).value.trim() || null, cantidad: Number($(".it-cant",r).value||1), monto: Number($(".it-monto",r).value||0) };
+        descripcion: $(".it-desc",r).value.trim() || null, cantidad: Number($(".it-cant",r).value||1), monto: Number($(".it-monto",r).value||0),
+        unidades_pedidas: (tipo!=="Tratamiento" && ref && ref===r.dataset.prod0 && r.dataset.u) ? r.dataset.u.split("|").slice(0, Number($(".it-cant",r).value||1)) : null };
     }).filter(x => x.tratamiento_id || x.producto_id || x.descripcion || x.monto);
     let vid = visita?.id;
     if(visita){ const r = await sb.from("visitas").update(d).eq("id",vid); if(r.error) return fail(r.error);
@@ -481,65 +512,278 @@ function grafico(rs){
   return s+`</svg>`;
 }
 
-/* ---------- STOCK ---------- */
-async function vStock(v){
+/* ---------- STOCK, LOTES, ENTREGAS Y ETIQUETAS ---------- */
+const lote4 = n => "L-" + String(n).padStart(4,"0");
+const cod6 = n => String(n).padStart(6,"0");
+const mmaa = s => { if(!s) return "—"; const [y,m] = s.slice(0,10).split("-"); return `${m}/${y.slice(2)}`; };
+const mmaaAFecha = t => { const m = (t||"").trim().match(/^(\d{1,2})\s*[\/\-.]?\s*(\d{2})$/); if(!m) return null; const mo=+m[1], y=2000+ +m[2]; if(mo<1||mo>12) return null; const d=new Date(y,mo,0).getDate(); return `${y}-${String(mo).padStart(2,"0")}-${String(d).padStart(2,"0")}`; };
+const sumarMeses = (iso, n) => { const [y,m] = iso.split("-").map(Number); const t = m-1+n; return `${String(t%12+1).padStart(2,"0")}/${String(y+Math.floor(t/12)).slice(2)}`; };
+const prodLabel = p => `${p.codigo_txt} · ${p.nombre}`;
+function areaDeLineas(lineas){ const s=[...new Set(lineas)]; return s.length===1 ? s[0] : "Funcional y Estética"; }
+function mascaraMMAA(inp){ inp.addEventListener("input", () => { let v = inp.value.replace(/[^\d]/g,"").slice(0,4); if(v.length>2) v = v.slice(0,2)+"/"+v.slice(2); inp.value = v; }); }
+
+async function vStock(v, tab){
+  tab = tab || sessionStorage.getItem("stockTab") || "productos";
+  try{ sessionStorage.setItem("stockTab", tab); }catch(e){}
   const prods = await catalogo("productos", true);
   alertasStock = prods.filter(x=>x.activo && x.alerta).length; marcarNav();
-  v.innerHTML = `<div class="row"><h1>Stock</h1><button class="btn right" id="bnprod">+ Producto</button><button class="btn pri" id="bcomp">+ Cargar compra</button></div>
-    <p class="sub">El stock se calcula solo: stock inicial + compras − lo entregado en visitas.</p>
-    <div class="row" style="margin-bottom:12px"><div class="search" style="flex:1;min-width:200px">${ICON.search}<input id="qs" placeholder="Buscar producto"></div>
+  v.innerHTML = `<div class="row"><h1>Stock</h1><span class="right"></span>
+      <button class="btn" id="bnprod">+ Registrar producto</button>
+      <button class="btn" id="bcomp">+ Cargar compra</button>
+      <button class="btn pri" id="bent">Entrega de producto</button></div>
+    <p class="sub">Cada compra genera un lote (L-0200, L-0201…) y una etiqueta por unidad. Al entregar, se dan de baja primero las unidades de los lotes más antiguos.</p>
+    <div class="tabs">${[["productos","Productos"],["lotes","Lotes / compras"],["buscar","Buscar unidad"]].map(([k,t])=>`<button class="tab ${tab===k?"on":""}" data-st="${k}">${t}</button>`).join("")}</div>
+    <div id="stc"></div>`;
+  $("#bnprod").onclick = () => modalProducto({});
+  $("#bcomp").onclick = () => modalCompra();
+  $("#bent").onclick = () => modalEntrega(null);
+  v.querySelectorAll("[data-st]").forEach(b => b.onclick = () => vStock(v, b.dataset.st));
+  const c = $("#stc");
+  if(tab==="productos") return tabProductos(c, prods);
+  if(tab==="lotes") return tabLotes(c);
+  if(tab==="buscar") return tabBuscarUnidad(c);
+}
+function tabProductos(c, prods){
+  c.innerHTML = `<div class="row" style="margin-bottom:12px"><div class="search" style="flex:1;min-width:200px">${ICON.search}<input id="qs" placeholder="Buscar por nombre o código"></div>
       <select id="fl" style="width:auto"><option value="">Funcional y Estética</option><option>Funcional</option><option>Estética</option></select>
-      <select id="fal" style="width:auto"><option value="">Todos</option><option value="1" ${alertasStock?"selected":""}>Solo con alerta</option></select></div>
-    <div class="card tight"><div class="tablewrap"><table><thead><tr><th>Producto</th><th>Línea</th><th class="num">Stock</th><th class="num">Mín.</th><th>Próx. vencimiento</th><th>Estado</th><th class="num">Precio</th><th></th></tr></thead><tbody id="ts"></tbody></table></div></div>
-    <h2 style="margin-top:24px">Últimas compras</h2><div id="ucomp"></div>`;
-  const pinta = () => { const q=$("#qs").value.toLowerCase(), l=$("#fl").value, a=$("#fal").value;
-    const L = prods.filter(p=>p.activo && (!q||p.nombre.toLowerCase().includes(q)) && (!l||p.linea===l) && (!a||p.alerta));
-    $("#ts").innerHTML = L.map(p=>`<tr><td><b>${esc(p.nombre)}</b></td><td>${areaPill(p.linea)}</td><td class="num">${num(p.stock_actual)}</td><td class="num muted">${num(p.stock_minimo)}</td><td>${fecha(p.proximo_vencimiento)}</td><td><span class="pill ${alertaClase(p.alerta)}">${esc(p.alerta||"OK")}</span></td><td class="num">${pesos(p.precio)}</td><td><button class="btn ghost" data-e="${p.id}">Editar</button></td></tr>`).join("") || `<tr><td colspan="8"><div class="empty">${prods.length?"Sin resultados.":"Todavía no hay productos. Tocá “+ Producto” para cargar el primero."}</div></td></tr>`;
+      <select id="fal" style="width:auto"><option value="">Todos</option><option value="1">Solo con alerta</option></select></div>
+    <div class="card tight"><div class="tablewrap"><table><thead><tr><th>Código</th><th>Producto</th><th>Línea</th><th class="num">Stock</th><th>Próx. vto.</th><th>Estado</th><th class="num">Precio</th><th></th></tr></thead><tbody id="ts"></tbody></table></div></div>`;
+  const pinta = () => { const q=$("#qs").value.trim().toLowerCase(), l=$("#fl").value, a=$("#fal").value;
+    const L = prods.filter(p=>p.activo && (!q || p.nombre.toLowerCase().includes(q) || p.codigo_txt.includes(q.replace(/^0+/,"")) || String(p.codigo)===q.replace(/^0+/,"")) && (!l||p.linea===l) && (!a||p.alerta));
+    $("#ts").innerHTML = L.map(p=>`<tr><td><code>${p.codigo_txt}</code></td><td><b>${esc(p.nombre)}</b></td><td>${areaPill(p.linea)}</td><td class="num">${num(p.stock_actual)}</td><td>${mmaa(p.proximo_vencimiento)}</td><td><span class="pill ${alertaClase(p.alerta)}">${esc(p.alerta||"OK")}</span></td><td class="num">${pesos(p.precio)}</td><td><button class="btn ghost" data-e="${p.id}">Ver</button></td></tr>`).join("")
+      || `<tr><td colspan="8"><div class="empty">${prods.length?"Sin resultados.":"Todavía no hay productos. Tocá “+ Registrar producto” para cargar el primero."}</div></td></tr>`;
     $("#ts").querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>modalProducto(prods.find(x=>x.id===b.dataset.e)));
   };
   ["qs","fl","fal"].forEach(id=>$("#"+id).oninput=pinta); pinta();
-  $("#bnprod").onclick = () => modalProducto({});
-  $("#bcomp").onclick = () => modalCompra();
-  const { data: cs } = await sb.from("compras").select("*, productos(nombre,linea)").order("fecha",{ascending:false}).order("creado",{ascending:false}).limit(15);
-  $("#ucomp").innerHTML = `<div class="card tight">${cs.length?`<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Producto</th><th class="num">Cant.</th><th class="num">Costo unit.</th><th>Vence</th><th>Lote</th><th>Proveedor</th><th></th></tr></thead><tbody>${cs.map(c=>`<tr><td>${fecha(c.fecha)}</td><td>${esc(c.productos?.nombre)}</td><td class="num">${num(c.cantidad)}</td><td class="num">${pesos(c.costo_unitario)}</td><td>${fecha(c.vencimiento)}</td><td>${esc(c.lote||"")}</td><td>${esc(c.proveedor||"")}</td><td>${c.lote_terminado?`<span class="pill s-none">Terminado</span>`:`<button class="btn ghost" data-t="${c.id}">Marcar terminado</button>`}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">Todavía no hay compras cargadas.</div>`}</div>`;
-  $("#ucomp").querySelectorAll("[data-t]").forEach(b=>b.onclick=async()=>{ const { error } = await sb.from("compras").update({lote_terminado:true}).eq("id",b.dataset.t); if(error) return fail(error); toast("Lote marcado como terminado"); cache.productos=null; render(); });
 }
-function modalProducto(p){
-  const nuevo=!p.id;
-  abrirModal(nuevo?"Nuevo producto":"Editar producto", `<form id="fpr" class="fields">
+async function tabLotes(c){
+  const { data, error } = await sb.from("v_lotes").select("*").order("numero",{ascending:false}).limit(200); if(error) throw error;
+  c.innerHTML = `<div class="card tight">${data.length?`<div class="tablewrap"><table><thead><tr><th>Lote</th><th>Fecha</th><th>Proveedor</th><th>Productos</th><th class="num">Unid.</th><th class="num">En stock</th><th class="num">Costo</th><th></th></tr></thead><tbody>${data.map(l=>`<tr><td><b>${l.lote}</b></td><td>${fecha(l.fecha)}</td><td>${esc(l.proveedor||"")}${l.nro_factura?`<div class="muted" style="font-size:12.5px">Fact. ${esc(l.nro_factura)}</div>`:""}</td><td>${esc(l.productos||"")}</td><td class="num">${l.unidades}</td><td class="num">${l.disponibles}</td><td class="num">${pesos(l.costo_total)}</td><td style="white-space:nowrap"><button class="btn ghost" data-et="${l.id}">Etiquetas</button>${Number(l.entregadas)===0?`<button class="btn ghost danger" data-del="${l.id}" data-n="${l.lote}">Borrar</button>`:""}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">Todavía no hay compras. Tocá “+ Cargar compra”.</div>`}</div>`;
+  c.querySelectorAll("[data-et]").forEach(b=>b.onclick=()=>modalEtiquetas(b.dataset.et));
+  c.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{ if(!(await confirmar(`¿Borrar el lote ${b.dataset.n} completo? Se borran sus unidades del stock.`))) return;
+    const { error } = await sb.from("lotes").delete().eq("id",b.dataset.del); if(error) return fail(error); toast("Lote borrado"); cache.productos=null; render(); });
+}
+function tabBuscarUnidad(c){
+  c.innerHTML = `<div class="card"><label class="f">Código de la etiqueta<input id="qu" placeholder="ej. L-0200 000097-01, o solo 000097" autocomplete="off" autocapitalize="characters"></label><div id="ru" style="margin-top:12px"></div></div>`;
+  let t; $("#qu").oninput = () => { clearTimeout(t); t=setTimeout(async()=>{
+    const q = $("#qu").value.trim().toUpperCase(); if(q.length<4){ $("#ru").innerHTML=""; return; }
+    let qy = sb.from("v_unidades").select("*").order("lote_numero",{ascending:false}).order("nro").limit(60);
+    const m = q.match(/^L-?\s*(\d{1,4})\s+(\d{1,6})-(\d{1,3})$/);
+    if(m) qy = qy.eq("lote_numero", +m[1]).eq("producto_codigo", cod6(m[2])).eq("nro", +m[3]);
+    else if(/^\d{1,6}(-\d{1,3})?$/.test(q)){ const [pc,n] = q.split("-"); qy = qy.eq("producto_codigo", cod6(pc)); if(n) qy = qy.eq("nro", +n); }
+    else qy = qy.ilike("codigo", `%${q.replace(/[%,()]/g,"")}%`);
+    const { data } = await qy;
+    $("#ru").innerHTML = data?.length ? `<div class="tablewrap"><table><thead><tr><th>Unidad</th><th>Producto</th><th>Vto.</th><th>Estado</th><th>Detalle</th></tr></thead><tbody>${data.map(u=>`<tr><td><code>${esc(u.codigo)}</code></td><td>${esc(u.producto)}</td><td>${mmaa(u.vencimiento)}</td><td><span class="pill ${u.estado==="Disponible"?"s-ok":u.estado==="Entregada"?"s-info":"s-none"}">${u.estado}</span></td><td>${u.estado==="Entregada"?`<a href="#/p/${u.paciente_id}">${esc(u.paciente||"")}</a> · ${fecha(u.fecha_baja)}`:u.estado==="Descartada"?`${esc(u.motivo_baja||"")} · ${fecha(u.fecha_baja)}`:`Compra ${fecha(u.lote_fecha)}${u.proveedor?" · "+esc(u.proveedor):""}`}</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">No se encontró ninguna unidad con ese código.</p>`;
+  },250); };
+  $("#qu").focus();
+}
+
+async function modalProducto(p){
+  const nuevo = !p.id;
+  let unidades = [];
+  if(!nuevo){ const { data } = await sb.from("v_unidades").select("*").eq("producto_id",p.id).eq("estado","Disponible").order("lote_numero").order("nro"); unidades = data||[]; }
+  const vencidas = unidades.filter(u=>u.vencimiento && u.vencimiento < hoy());
+  abrirModal(nuevo?"Registrar producto":`${p.codigo_txt} · ${p.nombre}`, `<form id="fpr" class="fields">
+    ${nuevo?`<p class="wide muted" style="margin:0">Al guardar se le asigna automáticamente un código único de 6 cifras.</p>`:`<p class="wide" style="margin:0">Código de producto: <b><code>${p.codigo_txt}</code></b></p>`}
     <label class="f wide">Nombre<input name="nombre" required value="${esc(p.nombre)}"></label>
     <label class="f">Línea<select name="linea">${["Funcional","Estética"].map(l=>`<option ${p.linea===l?"selected":""}>${l}</option>`).join("")}</select></label>
-    <label class="f">Costo $<input name="costo" type="number" step="any" value="${p.costo??""}"></label>
-    <label class="f">Precio de venta $<input name="precio" type="number" step="any" value="${p.precio??""}"></label>
-    <label class="f">Stock inicial<input name="stock_inicial" type="number" step="any" value="${p.stock_inicial??0}"></label>
-    <label class="f">Stock mínimo (alerta)<input name="stock_minimo" type="number" step="any" value="${p.stock_minimo??2}"></label>
-    <label class="f">Vencimiento (si no hay compras cargadas)<input name="vencimiento_inicial" type="date" value="${esc(p.vencimiento_inicial)}"></label>
-    <div class="wide row">${nuevo?"":`<button type="button" class="btn danger" id="bbaja">Dar de baja</button>`}<button class="btn pri right">Guardar</button></div></form>`);
-  if(!nuevo) $("#bbaja").onclick = async () => { const { error } = await sb.from("productos").update({activo:false}).eq("id",p.id); if(error) return fail(error); cerrarModal(); toast("Producto dado de baja"); cache.productos=null; render(); };
+    <label class="f">Costo $<input name="costo" type="number" step="any" inputmode="decimal" value="${p.costo??""}"></label>
+    <label class="f">Precio de venta $<input name="precio" type="number" step="any" inputmode="decimal" value="${p.precio??""}"></label>
+    <label class="f">Stock mínimo (alerta)<input name="stock_minimo" type="number" step="1" min="0" value="${p.stock_minimo??2}"></label>
+    <div class="wide row">${nuevo?"":`<button type="button" class="btn danger" id="bbaja">Dar de baja el producto</button>`}<button class="btn pri right">Guardar</button></div></form>
+    ${nuevo?"":`<h3>En stock: ${unidades.length} unidades</h3>
+      ${vencidas.length?`<div class="row" style="margin-bottom:8px"><span class="pill s-bad">${vencidas.length} vencidas</span><button class="btn" id="bdescv">Descartar las vencidas</button></div>`:""}
+      ${unidades.length?`<div class="card tight"><div class="tablewrap"><table><thead><tr><th>Unidad</th><th>Vto.</th><th>Proveedor</th><th></th></tr></thead><tbody>${unidades.map(u=>`<tr><td><code>${esc(u.codigo)}</code></td><td ${u.vencimiento&&u.vencimiento<hoy()?'style="color:var(--bad);font-weight:600"':""}>${mmaa(u.vencimiento)}</td><td class="muted">${esc(u.proveedor||"")}</td><td><button class="btn ghost danger" data-desc="${u.id}">Descartar</button></td></tr>`).join("")}</tbody></table></div></div>`:`<p class="muted">Sin unidades disponibles. Cargá una compra para sumar stock.</p>`}`}`);
+  const descartar = async (ids, motivo) => { const { error } = await sb.from("unidades").update({ estado:"Descartada", fecha_baja: hoy(), motivo_baja: motivo }).in("id", ids); if(error) return fail(error); toast(ids.length>1?`${ids.length} unidades descartadas`:"Unidad descartada"); cache.productos=null; const np=(await catalogo("productos",true)).find(x=>x.id===p.id); modalProducto(np||p); render(); };
+  if(!nuevo){
+    $("#bbaja").onclick = async () => { if(!(await confirmar("¿Dar de baja este producto? Deja de aparecer en las listas."))) return; const { error } = await sb.from("productos").update({activo:false}).eq("id",p.id); if(error) return fail(error); cerrarModal(); toast("Producto dado de baja"); cache.productos=null; render(); };
+    document.querySelectorAll("[data-desc]").forEach(b=>b.onclick=async()=>{ if(!(await confirmar("¿Descartar esta unidad (vencida, rota, etc.)?"))) return; descartar([b.dataset.desc], "Descartada"); });
+    if(vencidas.length) $("#bdescv").onclick = async () => { if(!(await confirmar(`¿Descartar las ${vencidas.length} unidades vencidas?`))) return; descartar(vencidas.map(u=>u.id), "Vencida"); };
+  }
   $("#fpr").onsubmit = async e => { e.preventDefault(); const d=Object.fromEntries(new FormData(e.target)); for(const k in d) if(d[k]==="") d[k]=null;
-    const r = nuevo ? await sb.from("productos").insert(d) : await sb.from("productos").update(d).eq("id",p.id);
-    if(r.error) return fail(r.error.code==="23505"?"Ya existe un producto con ese nombre en esa línea":r.error); cerrarModal(); toast("Producto guardado"); cache.productos=null; render(); };
+    const r = nuevo ? await sb.from("productos").insert(d).select("codigo").single() : await sb.from("productos").update(d).eq("id",p.id);
+    if(r.error) return fail(r.error.code==="23505"?"Ya existe un producto con ese nombre en esa línea":r.error);
+    cerrarModal(); toast(nuevo?`Producto registrado con el código ${cod6(r.data.codigo)}`:"Producto guardado"); cache.productos=null; render(); };
 }
+
 async function modalCompra(){
-  const prods = await catalogo("productos");
-  const { data: provs } = await sb.from("compras").select("proveedor").not("proveedor","is",null);
+  const prods = (await catalogo("productos", true)).filter(x=>x.activo);
+  if(!prods.length){ toast("Primero registrá el producto con “+ Registrar producto”."); return; }
+  const [{ data: ult }, { data: provs }] = await Promise.all([
+    sb.from("lotes").select("numero").gte("numero",200).order("numero",{ascending:false}).limit(1),
+    sb.from("lotes").select("proveedor").not("proveedor","is",null).limit(500)
+  ]);
+  const proximo = ult?.length ? ult[0].numero + 1 : 200;
   const proveedores = [...new Set((provs||[]).map(x=>x.proveedor))].sort();
-  abrirModal("Cargar compra", `<form id="fc" class="fields">
-    <label class="f wide">Producto<select name="producto_id" required><option value="">— elegir —</option>${["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(x=>x.linea===l&&x.activo).map(x=>`<option value="${x.id}" data-c="${x.costo??""}">${esc(x.nombre)}</option>`).join("")+`</optgroup>`).join("")}</select></label>
-    <label class="f">Fecha de compra<input name="fecha" type="date" required value="${hoy()}"></label>
-    <label class="f">Cantidad<input name="cantidad" type="number" min="1" step="any" required></label>
-    <label class="f">Costo unitario $<input name="costo_unitario" type="number" step="any"></label>
-    <label class="f">Vencimiento<input name="vencimiento" type="date"></label>
-    <label class="f">Lote<input name="lote"></label>
-    <label class="f">Proveedor<input name="proveedor" list="provl"><datalist id="provl">${proveedores.map(p=>`<option>${esc(p)}</option>`).join("")}</datalist></label>
-    <label class="f">N° de factura<input name="nro_factura"></label>
-    <label class="f wide" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="actualizar_costo" checked style="width:auto;min-height:0"> Actualizar el costo del producto con este valor</label>
-    <div class="wide row"><button class="btn pri right">Guardar compra</button></div></form>`);
-  $("#fc [name=producto_id]").onchange = e => { const c=e.target.selectedOptions[0]?.dataset.c; if(c && !$("#fc [name=costo_unitario]").value) $("#fc [name=costo_unitario]").value=c; };
-  $("#fc").onsubmit = async e => { e.preventDefault(); const d=Object.fromEntries(new FormData(e.target)); const upd = !!d.actualizar_costo; delete d.actualizar_costo; for(const k in d) if(d[k]==="") d[k]=null;
-    const { error } = await sb.from("compras").insert(d); if(error) return fail(error);
-    if(upd && d.costo_unitario) await sb.from("productos").update({costo:d.costo_unitario}).eq("id",d.producto_id);
-    cerrarModal(); toast("Compra cargada: el stock ya se actualizó"); cache.productos=null; render(); };
+  const opciones = `<option value="">— elegir producto —</option>` + ["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(x=>x.linea===l).map(x=>`<option value="${x.id}" data-c="${x.costo??""}">${esc(prodLabel(x))}</option>`).join("")+`</optgroup>`).join("");
+  abrirModal("Cargar compra", `<form id="fc" class="grid">
+    <div class="card" style="background:var(--accent-soft);border-color:transparent"><div class="row"><div><div class="muted" style="font-size:13px;font-weight:600">LOTE DE ESTA COMPRA</div><div style="font-family:var(--display);font-size:28px" id="lnum">${lote4(proximo)}</div></div>
+      <label class="right" style="display:flex;align-items:center;gap:8px;font-size:14px"><input type="checkbox" id="lprev" style="width:auto;min-height:0"> Es stock anterior (lote previo a L-0200)</label></div>
+      <label class="f" id="lprevbox" hidden style="margin-top:8px">Número de lote anterior (1 a 199)<input id="lprevnum" type="number" min="1" max="199" inputmode="numeric"></label></div>
+    <div class="fields">
+      <label class="f">Fecha de compra<input name="fecha" type="date" required value="${hoy()}"></label>
+      <label class="f">Proveedor<input name="proveedor" list="provl" required><datalist id="provl">${proveedores.map(p=>`<option>${esc(p)}</option>`).join("")}</datalist></label>
+      <label class="f">N° de factura (opcional)<input name="nro_factura"></label>
+    </div>
+    <div><h3>Productos de la compra</h3><div id="cits"></div><button type="button" class="btn ghost" id="caddp">+ Agregar otro producto</button></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px"><input type="checkbox" id="cupd" checked style="width:auto;min-height:0"> Actualizar el costo de cada producto con el de esta compra</label>
+    <div class="row"><span class="muted" id="cres"></span><button class="btn pri right" type="submit">Guardar compra y ver etiquetas</button></div></form>`);
+  const box = $("#cits");
+  const resumen = () => { let u=0, t=0; box.querySelectorAll(".citem").forEach(r=>{ const q=+$(".c-cant",r).value||0; u+=q; t+=q*(+$(".c-cost",r).value||0); }); $("#cres").textContent = `${u} unidades · ${u} etiquetas · costo ${pesos(t)}`; };
+  const agregar = () => {
+    box.insertAdjacentHTML("beforeend", `<div class="itemrow citem" style="grid-template-columns:1fr 80px 110px 100px 40px">
+      <label class="f">Producto<select class="c-prod" required>${opciones}</select></label>
+      <label class="f">Cant.<input class="c-cant" type="number" min="1" step="1" inputmode="numeric" required value="1"></label>
+      <label class="f">Costo unit. $<input class="c-cost" type="number" step="any" inputmode="decimal"></label>
+      <label class="f">Vto. (MM/AA)<input class="c-vto" inputmode="numeric" placeholder="MM/AA" maxlength="5" required value="${sumarMeses($("#fc [name=fecha]").value||hoy(),6)}"></label>
+      <button type="button" class="iconbtn x" title="Quitar">×</button></div>`);
+    const r = box.lastElementChild;
+    mascaraMMAA($(".c-vto",r)); $(".c-vto",r).oninput = () => { $(".c-vto",r).dataset.tocado = 1; };
+    $(".c-vto",r).addEventListener("input", () => r.querySelector(".c-vto").dataset.tocado = 1);
+    $(".c-prod",r).onchange = e => { const c=e.target.selectedOptions[0]?.dataset.c; if(c && !$(".c-cost",r).value) $(".c-cost",r).value=c; resumen(); };
+    $(".c-cant",r).oninput = $(".c-cost",r).oninput = resumen;
+    $(".x",r).onclick = () => { if(box.children.length>1){ r.remove(); resumen(); } };
+    resumen();
+  };
+  agregar();
+  $("#caddp").onclick = agregar;
+  $("#fc [name=fecha]").onchange = e => { box.querySelectorAll(".c-vto").forEach(i=>{ if(!i.dataset.tocado) i.value = sumarMeses(e.target.value||hoy(),6); }); };
+  $("#lprev").onchange = e => { $("#lprevbox").hidden = !e.target.checked; $("#lnum").textContent = e.target.checked ? "L-0___" : lote4(proximo); if(e.target.checked) $("#lprevnum").focus(); };
+  $("#lprevnum").oninput = e => { const n=+e.target.value; $("#lnum").textContent = n>0&&n<200 ? lote4(n) : "L-0___"; };
+  $("#fc").onsubmit = async e => { e.preventDefault();
+    const f = Object.fromEntries(new FormData(e.target));
+    let numero = null;
+    if($("#lprev").checked){ numero = +$("#lprevnum").value; if(!(numero>0 && numero<200)) return toast("El lote anterior tiene que ser un número entre 1 y 199."); }
+    const items = [];
+    for(const r of box.querySelectorAll(".citem")){
+      const venc = mmaaAFecha($(".c-vto",r).value); if(!venc) return toast("Revisá el vencimiento: tiene que ser MM/AA, por ejemplo 04/27.");
+      const cant = +$(".c-cant",r).value; if(!(cant>=1 && Number.isInteger(cant))) return toast("La cantidad tiene que ser un número entero.");
+      items.push({ producto_id: $(".c-prod",r).value, cantidad: cant, costo_unitario: $(".c-cost",r).value || null, vencimiento: venc, actualizar_costo: $("#cupd").checked });
+    }
+    const btn = e.target.querySelector("[type=submit]"); btn.disabled = true;
+    const { data, error } = await sb.rpc("registrar_compra", { p_fecha: f.fecha, p_proveedor: f.proveedor.trim(), p_factura: f.nro_factura || null, p_numero: numero, p_items: items });
+    btn.disabled = false; if(error) return fail(error);
+    cache.productos = null; toast(`Compra guardada en el lote ${lote4(data.numero)}`); render(); modalEtiquetas(data.id);
+  };
+}
+
+/* Etiquetas: hoja A4 de 21 (63,5 × 38,1 mm) o rollo de 50 × 30 mm */
+async function modalEtiquetas(loteId){
+  const { data: us, error } = await sb.from("v_unidades").select("*").eq("lote_id", loteId).order("producto").order("nro"); if(error) return fail(error);
+  if(!us.length) return toast("Ese lote no tiene unidades.");
+  let formato = "a4"; try{ formato = localStorage.getItem("etqFormato") || "a4"; }catch(e){}
+  abrirModal(`Etiquetas del lote ${us[0].lote}`, `<div class="fields">
+      <label class="f">Formato<select id="efmt"><option value="a4">Hoja A4 · 21 etiquetas (63,5 × 38,1 mm)</option><option value="rollo">Rollo de etiquetas 50 × 30 mm</option></select></label>
+      <label class="f" id="eskipbox">Empezar en la etiqueta n° (si la hoja ya está usada)<input id="eskip" type="number" min="1" max="21" value="1" inputmode="numeric"></label>
+      <label class="f">Qué imprimir<select id="equal"><option value="todas">Todas (${us.length})</option><option value="disp">Solo las que están en stock (${us.filter(u=>u.estado==="Disponible").length})</option></select></label></div>
+    <p class="muted">Vista previa:</p><div id="eprev" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
+    <div class="row"><button class="btn pri right" id="eprint">Imprimir</button></div>`);
+  $("#efmt").value = formato;
+  const lista = () => $("#equal").value==="disp" ? us.filter(u=>u.estado==="Disponible") : us;
+  const prev = () => { formato = $("#efmt").value; $("#eskipbox").hidden = formato!=="a4"; try{ localStorage.setItem("etqFormato", formato); }catch(e){}
+    $("#eprev").innerHTML = lista().slice(0,6).map(u=>`<div class="etq etq-${formato}" style="border:1px dashed var(--line);background:#fff">${etiquetaHTML(u)}</div>`).join("") + (lista().length>6?`<span class="muted" style="align-self:center">+ ${lista().length-6} más</span>`:""); };
+  ["efmt","equal"].forEach(id=>$("#"+id).onchange=prev); prev();
+  $("#eprint").onclick = () => imprimirEtiquetas(lista(), formato, formato==="a4" ? Math.max(0,(+$("#eskip").value||1)-1) : 0);
+}
+function etiquetaHTML(u){
+  return `<img src="logo.png" alt=""><div class="etq-t"><div class="etq-n">${esc(u.producto)}</div><div class="etq-l">Lote <b>${esc(u.lote)}</b></div><div class="etq-c">${esc(u.codigo_corto)}</div>${u.vencimiento?`<div class="etq-v">Vto. ${mmaa(u.vencimiento)}</div>`:""}</div>`;
+}
+function imprimirEtiquetas(lista, formato, saltear){
+  let zona = document.getElementById("print"); if(!zona){ zona = document.createElement("div"); zona.id = "print"; document.body.appendChild(zona); }
+  zona.className = "print-" + formato;
+  zona.innerHTML = Array(saltear).fill(`<div class="etq etq-${formato}"></div>`).join("") + lista.map(u=>`<div class="etq etq-${formato}">${etiquetaHTML(u)}</div>`).join("");
+  let st = document.getElementById("pagestyle"); if(!st){ st = document.createElement("style"); st.id = "pagestyle"; document.head.appendChild(st); }
+  st.textContent = formato==="a4" ? "@page{size:A4;margin:15.1mm 7.2mm}" : "@page{size:50mm 30mm;margin:0}";
+  const imgs = [...zona.querySelectorAll("img")];
+  Promise.all(imgs.map(i => i.complete ? 1 : new Promise(r => { i.onload = i.onerror = r; }))).then(() => {
+    document.body.classList.add("printing"); setTimeout(() => { window.print(); setTimeout(()=>document.body.classList.remove("printing"), 500); }, 50);
+  });
+}
+
+/* Entrega de productos a un paciente: código 000097-02 = producto 000097, 2 unidades (lotes más antiguos primero) */
+async function modalEntrega(paciente){
+  const prods = (await catalogo("productos", true)).filter(x=>x.activo);
+  const porCodigo = Object.fromEntries(prods.map(p=>[p.codigo, p]));
+  const disp = {};   // producto_id -> unidades disponibles en orden de baja
+  const cargarDisp = async pid => { if(!disp[pid]){ const { data } = await sb.from("v_unidades").select("id,codigo,codigo_corto,lote,lote_numero,nro,vencimiento").eq("producto_id",pid).eq("estado","Disponible").order("lote_numero").order("nro"); disp[pid] = data||[]; } return disp[pid]; };
+  let pac = paciente; const lineas = [];
+  abrirModal("Entrega de producto", `<form id="fe" class="grid">
+    <div id="epac"></div>
+    <div class="fields"><label class="f">Fecha<input name="fecha" type="date" required value="${hoy()}"></label></div>
+    <div class="card" style="background:var(--accent-soft);border-color:transparent">
+      <label class="f">Código del producto<div class="row" style="flex-wrap:nowrap"><input id="ecod" placeholder="000097-02  (código - cantidad)" autocomplete="off" inputmode="text" autocapitalize="characters" style="font-family:ui-monospace,Menlo,monospace;font-size:18px"><button type="button" class="btn pri" id="eadd">Agregar</button></div></label>
+      <p class="muted" style="margin:6px 0 0;font-size:13px">Escribí el código de 6 cifras y la cantidad (ej. <b>000097-02</b> son 2 unidades). Para una unidad puntual, escribí la etiqueta completa (ej. <b>L-0200 000097-01</b>). También podés elegirlo de la lista:</p>
+      <select id="esel" style="margin-top:8px"><option value="">— elegir producto de la lista —</option>${["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(x=>x.linea===l).map(x=>`<option value="${x.codigo}">${esc(prodLabel(x))} · stock ${x.stock_actual}</option>`).join("")+`</optgroup>`).join("")}</select>
+      <div id="emsg" style="color:var(--bad);font-weight:600;margin-top:6px"></div></div>
+    <div id="elin"></div>
+    <label class="f">Observación (opcional)<input name="obs"></label>
+    <div class="row"><b>Total: <span id="etot">$ 0</span></b><button class="btn pri right" type="submit" id="eok">Registrar entrega</button></div></form>`);
+  const pintaPac = () => {
+    if(pac){ $("#epac").innerHTML = `<div class="row"><div><div class="muted" style="font-size:13px;font-weight:600">PACIENTE</div><b style="font-size:18px">${esc(pac.nombre)}</b></div>${paciente?"":`<button type="button" class="btn ghost right" id="ecamb">Cambiar</button>`}</div>`; if(!paciente) $("#ecamb").onclick=()=>{ pac=null; pintaPac(); }; return; }
+    $("#epac").innerHTML = `<label class="f">Paciente<div class="search">${ICON.search}<input id="epq" placeholder="Buscar por apellido, nombre o DNI" autocomplete="off"></div></label><div id="epr"></div>`;
+    let t; $("#epq").oninput = () => { clearTimeout(t); t=setTimeout(async()=>{ const q=$("#epq").value.trim().replace(/[%,()]/g,""); if(q.length<2){ $("#epr").innerHTML=""; return; }
+      const { data } = await sb.from("pacientes").select("id,nombre,dni").or(`nombre.ilike.%${q}%,dni.ilike.%${q}%`).order("nombre").limit(8);
+      $("#epr").innerHTML = `<div class="card tight">${data.length?`<ul class="list">${data.map(p=>`<li><button type="button" class="item" style="width:100%;border:none;background:none;text-align:left;cursor:pointer" data-p="${p.id}"><div class="main"><div class="t">${esc(p.nombre)}</div><div class="s">${p.dni?"DNI "+esc(p.dni):""}</div></div></button></li>`).join("")}</ul>`:`<div class="empty">Sin resultados.</div>`}</div>`;
+      $("#epr").querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{ pac=data.find(x=>x.id===b.dataset.p); pintaPac(); $("#ecod").focus(); }); },250); };
+    $("#epq").focus();
+  };
+  pintaPac();
+  const msg = t => { $("#emsg").textContent = t||""; };
+  const asignacion = () => { // simula la baja igual que el servidor
+    const usadas = new Set(); lineas.forEach(l=>l.pedidas.forEach(c=>usadas.add(c)));
+    return lineas.map(l => { const libres = disp[l.prod.id].filter(u=>!usadas.has(u.codigo) && !l.pedidas.includes(u.codigo));
+      const fifo = libres.slice(0, Math.max(0, l.cantidad - l.pedidas.length)); fifo.forEach(u=>usadas.add(u.codigo));
+      const total = disp[l.prod.id].length - lineas.filter(o=>o!==l && o.prod.id===l.prod.id).reduce((a,o)=>a+o.cantidad,0);
+      return { unidades: [...l.pedidas.map(c=>disp[l.prod.id].find(u=>u.codigo===c)), ...fifo], falta: l.cantidad - l.pedidas.length - fifo.length, quedan: total }; });
+  };
+  const pintar = () => {
+    const asg = asignacion(); let tot = 0, hayFalta = false;
+    $("#elin").innerHTML = lineas.length ? `<div class="card tight"><div class="tablewrap"><table><thead><tr><th>Producto</th><th class="num">Cant.</th><th>Unidades que se dan de baja</th><th class="num">Importe $</th><th></th></tr></thead><tbody>${lineas.map((l,i)=>{ tot += Number(l.monto||0); if(asg[i].falta>0) hayFalta = true;
+      return `<tr><td><code>${l.prod.codigo_txt}</code><br><b>${esc(l.prod.nombre)}</b></td><td class="num"><input type="number" min="1" step="1" value="${l.cantidad}" data-q="${i}" style="width:70px;text-align:right"></td>
+        <td style="font-size:13px">${asg[i].unidades.map(u=>`<code>${esc(u.codigo)}</code>${u.vencimiento?` <span class="muted">vto ${mmaa(u.vencimiento)}</span>`:""}`).join("<br>")}${asg[i].falta>0?`<div style="color:var(--bad);font-weight:600">Stock insuficiente: faltan ${asg[i].falta}</div>`:""}</td>
+        <td class="num"><input type="number" step="any" inputmode="decimal" value="${l.monto??""}" data-m="${i}" style="width:110px;text-align:right"></td><td><button type="button" class="iconbtn" data-x="${i}">×</button></td></tr>`; }).join("")}</tbody></table></div></div>` : `<p class="muted" style="margin:0">Todavía no agregaste productos.</p>`;
+    $("#etot").textContent = pesos(tot); $("#eok").disabled = !lineas.length || hayFalta;
+    $("#elin").querySelectorAll("[data-q]").forEach(inp=>inp.onchange=()=>{ const l=lineas[+inp.dataset.q]; const n=Math.max(1,Math.floor(+inp.value||1)); l.cantidad=Math.max(n,l.pedidas.length); if(!l.montoTocado) l.monto = l.prod.precio!=null ? l.prod.precio*l.cantidad : l.monto; pintar(); });
+    $("#elin").querySelectorAll("[data-m]").forEach(inp=>inp.oninput=()=>{ const l=lineas[+inp.dataset.m]; l.monto = inp.value; l.montoTocado = true; let t=0; lineas.forEach(x=>t+=Number(x.monto||0)); $("#etot").textContent=pesos(t); });
+    $("#elin").querySelectorAll("[data-x]").forEach(b=>b.onclick=()=>{ lineas.splice(+b.dataset.x,1); pintar(); });
+  };
+  const agregarLinea = async (prod, cant, codigoUnidad) => {
+    await cargarDisp(prod.id);
+    let l = lineas.find(x=>x.prod.id===prod.id);
+    if(!l){ l = { prod, cantidad: 0, pedidas: [], monto: null, montoTocado: false }; lineas.push(l); }
+    if(codigoUnidad){ if(l.pedidas.includes(codigoUnidad)){ msg("Esa unidad ya está en la lista."); return; } l.pedidas.push(codigoUnidad); l.cantidad = Math.max(l.cantidad + 1, l.pedidas.length); }
+    else l.cantidad += cant;
+    if(!l.montoTocado) l.monto = prod.precio!=null ? prod.precio*l.cantidad : null;
+    msg(""); pintar();
+  };
+  const procesar = async () => {
+    const t = $("#ecod").value.trim().toUpperCase(); if(!t) return;
+    let m = t.match(/^L-?\s*(\d{1,4})\s+(\d{1,6})-(\d{1,3})$/);
+    if(m){ const prod = porCodigo[+m[2]]; if(!prod) return msg(`No existe el producto ${cod6(m[2])}.`);
+      const u = (await cargarDisp(prod.id)).find(x=>x.lote_numero===+m[1] && x.nro===+m[3]);
+      if(!u) return msg(`La unidad ${lote4(+m[1])} ${cod6(m[2])}-${String(+m[3]).padStart(2,"0")} no está disponible (no existe, ya se entregó o se descartó).`);
+      await agregarLinea(prod, 1, u.codigo); $("#ecod").value = ""; return; }
+    m = t.match(/^(\d{1,6})(?:\s*-\s*(\d{1,2}))?$/);
+    if(!m) return msg("Formato no reconocido. Usá 000097-02 o L-0200 000097-01.");
+    const prod = porCodigo[+m[1]]; if(!prod) return msg(`No existe el producto ${cod6(m[1])}.`);
+    const cant = m[2] ? +m[2] : 1; if(cant<1) return msg("La cantidad tiene que ser 1 o más.");
+    await agregarLinea(prod, cant); $("#ecod").value = ""; $("#ecod").focus();
+  };
+  $("#eadd").onclick = procesar;
+  $("#ecod").onkeydown = e => { if(e.key==="Enter"){ e.preventDefault(); procesar(); } };
+  $("#esel").onchange = async e => { const p = porCodigo[+e.target.value]; e.target.value=""; if(p) await agregarLinea(p, 1); };
+  pintar();
+  $("#fe").onsubmit = async e => { e.preventDefault();
+    if(!pac) return toast("Elegí el paciente."); if(!lineas.length) return toast("Agregá al menos un producto.");
+    const f = Object.fromEntries(new FormData(e.target));
+    const items = lineas.map(l=>({ producto_id: l.prod.id, cantidad: l.cantidad, monto: Number(l.monto||0), unidades: l.pedidas }));
+    $("#eok").disabled = true;
+    const { error } = await sb.rpc("registrar_entrega", { p_paciente: pac.id, p_fecha: f.fecha, p_area: areaDeLineas(lineas.map(l=>l.prod.linea)), p_obs: f.obs || null, p_items: items });
+    $("#eok").disabled = false; if(error) return fail(error);
+    cerrarModal(); cache.productos = null; toast(`Entrega registrada · ${lineas.reduce((a,l)=>a+l.cantidad,0)} unidades dadas de baja`);
+    if(paciente) render(); else location.hash = `#/p/${pac.id}/visitas`;
+  };
+  if(pac) $("#ecod").focus();
 }
 
 /* ---------- FACTURACIÓN ---------- */
