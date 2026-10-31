@@ -153,7 +153,7 @@ td.num,th.num{text-align:right}
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31b";
+const APP_VERSION = "2026-10-31c";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -481,9 +481,13 @@ async function modalLab(p, fechaLab=null, previos=[]){
       <div class="fields"><label class="f">Fecha del análisis<input name="fecha" type="date" required value="${fechaLab||hoy()}"></label>
       <label class="f">Buscar determinación<input id="qdet" placeholder="ej. ferritina, TSH…"></label></div>
       <p class="muted" style="margin:0">Completá solo los valores que vinieron en el análisis. Los vacíos se ignoran.</p>
-      <div id="dets">${grupos.map(g=>`<div class="labgroup" data-g="${esc(g)}"><h3>${esc(g)}</h3>${dets.filter(d=>d.grupo===g).map(d=>`<div class="labrow" data-n="${esc(d.nombre.toLowerCase())}"><span>${esc(d.nombre)} <span class="rng">${esc(d.unidad||"")}</span></span><input type="number" step="any" inputmode="decimal" data-d="${d.id}" value="${prev[d.id]?.valor??""}" placeholder="valor"><span class="rng">${d.ref_min!=null||d.ref_max!=null?`${d.ref_min??"…"}–${d.ref_max??"…"}`:""}</span></div>`).join("")}</div>`).join("")}</div>
+      <div id="dets">${grupos.map(g=>`<div class="labgroup" data-g="${esc(g)}"><h3>${esc(g)}</h3>${dets.filter(d=>d.grupo===g).map(d=>`<div class="labrow" data-n="${esc(d.nombre.toLowerCase())}"><span>${esc(d.nombre)} <span class="rng">${esc(d.unidad||"")}</span></span>${d.calculada?`<input type="text" readonly data-calc="${esc(d.clave||"")}" value="${prev[d.id]?.valor??""}" placeholder="automático" title="Se calcula solo" style="background:var(--surface2);font-weight:700">`:`<input type="number" step="any" inputmode="decimal" data-d="${d.id}" data-clave="${esc(d.clave||"")}" value="${prev[d.id]?.valor??""}" placeholder="valor">`}<span class="rng">${d.ref_min!=null||d.ref_max!=null?`${d.ref_min??"…"}–${d.ref_max??"…"}`:""}</span></div>`).join("")}</div>`).join("")}</div>
       <div class="row">${fechaLab?`<button type="button" class="btn danger" id="bdell">Eliminar este análisis</button>`:""}<button class="btn pri right" type="submit">Guardar laboratorio</button></div>
     </form>`);
+  const calcPerfil = () => { const out = document.querySelector('#dets [data-calc="apob_apoa"]'); if(!out) return;
+    const a = parseFloat(document.querySelector('#dets [data-clave="apoa"]')?.value), b = parseFloat(document.querySelector('#dets [data-clave="apob"]')?.value);
+    out.value = (a>0 && !isNaN(b)) ? (Math.round(b/a*100)/100).toString() : ""; };
+  document.querySelectorAll('#dets [data-clave="apoa"], #dets [data-clave="apob"]').forEach(i => i.addEventListener("input", calcPerfil)); calcPerfil();
   $("#qdet").oninput = e => { const q=e.target.value.toLowerCase(); document.querySelectorAll(".labrow").forEach(r=>r.hidden = q && !r.dataset.n.includes(q)); document.querySelectorAll(".labgroup").forEach(g=>g.hidden = ![...g.querySelectorAll(".labrow")].some(r=>!r.hidden)); };
   if(fechaLab) $("#bdell").onclick = async () => { if(!(await confirmar("¿Eliminar todos los valores de este análisis?"))) return; const { error } = await sb.from("resultados").delete().eq("paciente_id",p.id).eq("fecha",fechaLab); if(error) return fail(error); cerrarModal(); toast("Análisis eliminado"); render(); };
   $("#fl").onsubmit = async e => { e.preventDefault();
