@@ -181,7 +181,7 @@ td.num,th.num{text-align:right}
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31g";
+const APP_VERSION = "2026-10-31h";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -195,6 +195,7 @@ const $ = (s, el=document) => el.querySelector(s);
 const esc = s => (s ?? "").toString().replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const pesos = n => (n==null||isNaN(n)) ? "—" : "$ " + Math.round(Number(n)).toLocaleString("es-AR");
 const num = n => (n==null||n==="") ? "—" : Number(n).toLocaleString("es-AR",{maximumFractionDigits:2});
+const rtxt = (a,b) => (a!=null&&b!=null) ? `${num(a)} – ${num(b)}` : a!=null ? `> ${num(a)}` : b!=null ? `< ${num(b)}` : "";
 const hoy = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
 const fecha = s => { if(!s) return "—"; const [y,m,d]=s.slice(0,10).split("-"); return `${d}/${m}/${y}`; };
 const MESES=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
@@ -494,7 +495,7 @@ const DRA = "Dra. Analía Jakowluk";
 const semaforo = e => ({"Óptimo":"#2E8B57","Normal":"#2E8B57","Fuera del óptimo":"#E8B000","Alto":"#C62828","Bajo":"#C62828"}[e] || "#9E9E9E");
 const semaforoTxt = e => ({"Óptimo":"Óptimo","Normal":"Dentro de referencia","Fuera del óptimo":"Precaución","Alto":"Alto · fuera de rango","Bajo":"Bajo · fuera de rango"}[e] || "Sin rango cargado");
 const punto = e => `<span class="sem" style="background:${semaforo(e)}"></span>`;
-const rangoTxt = (a,b) => (a!=null||b!=null) ? `${a!=null?num(a):"…"} – ${b!=null?num(b):"…"}` : "—";
+const rangoTxt = (a,b) => rtxt(a,b) || "—";
 function cabeceraInforme(p, titulo, sub){
   return `<header class="inf-head"><img src="logo.png" alt=""><div class="inf-dra"><div class="inf-marca">Eternal Secret</div><div><b>${DRA}</b></div><div class="inf-mut">Medicina funcional y estética</div></div>
     <div class="inf-tit"><div class="inf-h">${esc(titulo)}</div><div class="inf-mut">${esc(sub||"")}</div></div></header>
@@ -551,8 +552,8 @@ async function tabLabs(c, p){
   c.querySelectorAll("[data-pf]").forEach(b => b.onclick = () => imprimirLaboratorio(p, b.dataset.pf, data.filter(r=>r.fecha===b.dataset.pf)));
 }
 function rango(r){
-  const ref = (r.rmin!=null||r.rmax!=null) ? `${r.rmin??"…"}–${r.rmax??"…"}` : "";
-  const opt = (r.omin!=null||r.omax!=null) ? `óptimo ${r.omin??"…"}–${r.omax??"…"}` : "";
+  const ref = rtxt(r.rmin, r.rmax);
+  const opt = (r.omin!=null||r.omax!=null) ? `óptimo ${rtxt(r.omin, r.omax)}` : "";
   return [ref,opt].filter(Boolean).join(" · ") || "sin rango";
 }
 async function modalLab(p, fechaLab=null, previos=[]){
@@ -564,7 +565,7 @@ async function modalLab(p, fechaLab=null, previos=[]){
       <div class="fields"><label class="f">Fecha del análisis<input name="fecha" type="date" required value="${fechaLab||hoy()}"></label>
       <label class="f">Buscar determinación<input id="qdet" placeholder="ej. ferritina, TSH…"></label></div>
       <p class="muted" style="margin:0">Completá solo los valores que vinieron en el análisis. Los vacíos se ignoran.</p>
-      <div id="dets">${grupos.map(g=>`<div class="labgroup" data-g="${esc(g)}"><h3>${esc(g)}</h3>${dets.filter(d=>d.grupo===g).map(d=>`<div class="labrow" data-n="${esc(d.nombre.toLowerCase())}"><span>${esc(d.nombre)} <span class="rng">${esc(d.unidad||"")}</span></span>${d.calculada?`<input type="text" readonly data-calc="${esc(d.clave||"")}" data-num="${esc(d.calc_num||"")}" data-den="${esc(d.calc_den||"")}" value="${prev[d.id]?.valor??""}" placeholder="automático" title="Se calcula solo" style="background:var(--surface2);font-weight:700">`:(d.cualitativa?`<select data-d="${d.id}" data-clave="${esc(d.clave||"")}"><option value=""></option><option value="0" ${prev[d.id]&&Number(prev[d.id].valor)===0?"selected":""}>No reactivo</option><option value="1" ${prev[d.id]&&Number(prev[d.id].valor)!==0?"selected":""}>Reactivo</option></select>`:`<input type="number" step="any" inputmode="decimal" data-d="${d.id}" data-clave="${esc(d.clave||"")}" value="${prev[d.id]?.valor??""}" placeholder="valor">`)}<span class="rng">${d.ref_min!=null||d.ref_max!=null?`${d.ref_min??"…"}–${d.ref_max??"…"}`:""}</span></div>`).join("")}</div>`).join("")}</div>
+      <div id="dets">${grupos.map(g=>`<div class="labgroup" data-g="${esc(g)}"><h3>${esc(g)}</h3>${dets.filter(d=>d.grupo===g).map(d=>`<div class="labrow" data-n="${esc(d.nombre.toLowerCase())}"><span>${esc(d.nombre)} <span class="rng">${esc(d.unidad||"")}</span></span>${d.calculada?`<input type="text" readonly data-calc="${esc(d.clave||"")}" data-num="${esc(d.calc_num||"")}" data-den="${esc(d.calc_den||"")}" value="${prev[d.id]?.valor??""}" placeholder="automático" title="Se calcula solo" style="background:var(--surface2);font-weight:700">`:(d.cualitativa?`<select data-d="${d.id}" data-clave="${esc(d.clave||"")}"><option value=""></option><option value="0" ${prev[d.id]&&Number(prev[d.id].valor)===0?"selected":""}>No reactivo</option><option value="1" ${prev[d.id]&&Number(prev[d.id].valor)!==0?"selected":""}>Reactivo</option></select>`:`<input type="number" step="any" inputmode="decimal" data-d="${d.id}" data-clave="${esc(d.clave||"")}" value="${prev[d.id]?.valor??""}" placeholder="valor">`)}<span class="rng">${d.ref_min!=null||d.ref_max!=null?rtxt(d.ref_min,d.ref_max):""}</span></div>`).join("")}</div>`).join("")}</div>
       <div class="row">${fechaLab?`<button type="button" class="btn danger" id="bdell">Eliminar este análisis</button>`:""}<button class="btn pri right" type="submit">Guardar laboratorio</button></div>
     </form>`);
   const calcIndices = () => document.querySelectorAll('#dets [data-calc]').forEach(out => {
@@ -913,7 +914,7 @@ async function vAjustes(v){
     <div class="tabs"><button class="tab on" data-c="t">Tratamientos</button><button class="tab" data-c="d">Rangos de laboratorio</button></div><div id="cc"></div>`;
   const pintaT = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:10px"><button class="btn pri right" id="bnt">+ Tratamiento</button></div><div class="card tight">${trats.length?`<ul class="list">${trats.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left;cursor:pointer" data-t="${t.id}"><div class="main"><div class="t">${esc(t.nombre)}${t.activo?"":" <span class='pill s-none'>inactivo</span>"}</div><div class="s">${esc(t.categoria||"")}</div></div>${areaPill(t.area)}<div class="r">${pesos(t.precio)}</div></button></li>`).join("")}</ul>`:`<div class="empty">Cargá los tratamientos que hace (facial, PRP, sueroterapia…) con su precio. Así al cargar una visita se completan solos.</div>`}</div>`;
     $("#bnt").onclick=()=>modalTrat({}); $("#cc").querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>modalTrat(trats.find(x=>x.id===b.dataset.t))); };
-  const pintaD = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:8px"><span class="right"></span><button class="btn" id="bplan">Imprimir planilla para completar a mano</button></div><p class="muted">Tocá una determinación para cargar el rango de referencia y el óptimo funcional. Si es distinto para hombres, completá también esos campos.</p><div class="card tight"><div class="tablewrap"><table><thead><tr><th>Determinación</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Hombres</th><th></th></tr></thead><tbody>${dets.map(d=>`<tr><td><b>${esc(d.nombre)}</b><div class="muted" style="font-size:12.5px">${esc(d.grupo)}</div></td><td>${esc(d.unidad||"")}</td><td>${d.ref_min!=null||d.ref_max!=null?`${d.ref_min??"…"}–${d.ref_max??"…"}`:'<span class="muted">—</span>'}</td><td>${d.opt_min!=null||d.opt_max!=null?`${d.opt_min??"…"}–${d.opt_max??"…"}`:'<span class="muted">—</span>'}</td><td class="muted">${[d.ref_min_h,d.ref_max_h,d.opt_min_h,d.opt_max_h].some(x=>x!=null)?"sí":""}</td><td><button class="btn ghost" data-d="${d.id}">Editar</button></td></tr>`).join("")}</tbody></table></div></div>`;
+  const pintaD = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:8px"><span class="right"></span><button class="btn" id="bplan">Imprimir planilla para completar a mano</button></div><p class="muted">Tocá una determinación para cargar el rango de referencia y el óptimo funcional. Si es distinto para hombres, completá también esos campos.</p><div class="card tight"><div class="tablewrap"><table><thead><tr><th>Determinación</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Hombres</th><th></th></tr></thead><tbody>${dets.map(d=>`<tr><td><b>${esc(d.nombre)}</b><div class="muted" style="font-size:12.5px">${esc(d.grupo)}</div></td><td>${esc(d.unidad||"")}</td><td>${d.ref_min!=null||d.ref_max!=null?rtxt(d.ref_min,d.ref_max):'<span class="muted">—</span>'}</td><td>${d.opt_min!=null||d.opt_max!=null?rtxt(d.opt_min,d.opt_max):'<span class="muted">—</span>'}</td><td class="muted">${[d.ref_min_h,d.ref_max_h,d.opt_min_h,d.opt_max_h].some(x=>x!=null)?"sí":""}</td><td><button class="btn ghost" data-d="${d.id}">Editar</button></td></tr>`).join("")}</tbody></table></div></div>`;
     $("#cc").querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>modalDet(dets.find(x=>x.id===b.dataset.d)));
     $("#bplan").onclick = () => imprimirPlanilla(dets); };
   document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{ document.querySelectorAll("[data-c]").forEach(x=>x.classList.toggle("on",x===b)); b.dataset.c==="t"?pintaT():pintaD(); });
@@ -932,15 +933,34 @@ function modalTrat(t){
     const r = nuevo ? await sb.from("tratamientos").insert(d) : await sb.from("tratamientos").update(d).eq("id",t.id); if(r.error) return fail(r.error); cerrarModal(); toast("Tratamiento guardado"); cache.tratamientos=null; render(); };
 }
 function modalDet(d){
-  const campo=(k,l)=>`<label class="f">${l}<input name="${k}" type="number" step="any" value="${d[k]??""}"></label>`;
+  const tipoDe = (a,b) => a!=null&&b!=null ? "entre" : a!=null ? "mayor" : b!=null ? "menor" : "";
+  const bloque = (pre, titulo) => { const a=d[pre+"_min"], b=d[pre+"_max"]; const t=tipoDe(a,b);
+    return `<div class="wide rgbox" data-pre="${pre}"><div class="f" style="margin-bottom:4px">${titulo}</div><div class="row" style="flex-wrap:nowrap">
+      <select class="rg-t" style="width:auto"><option value="" ${t===""?"selected":""}>Sin rango</option><option value="entre" ${t==="entre"?"selected":""}>Entre</option><option value="mayor" ${t==="mayor"?"selected":""}>Mayor a</option><option value="menor" ${t==="menor"?"selected":""}>Menor a</option></select>
+      <input class="rg-a" type="number" step="any" inputmode="decimal" placeholder="desde" value="${a??""}"><span class="rg-y">y</span><input class="rg-b" type="number" step="any" inputmode="decimal" placeholder="hasta" value="${b??""}"></div></div>`; };
   abrirModal(d.nombre, `<form id="fd" class="fields">
     <label class="f">Unidad<input name="unidad" value="${esc(d.unidad)}"></label><div></div>
-    ${campo("ref_min","Referencia mín.")}${campo("ref_max","Referencia máx.")}${campo("opt_min","Óptimo mín.")}${campo("opt_max","Óptimo máx.")}
+    ${bloque("ref","Rango de referencia")}${bloque("opt","Rango óptimo")}
     <h3 class="wide">Solo si es distinto para hombres</h3>
-    ${campo("ref_min_h","Referencia mín. (H)")}${campo("ref_max_h","Referencia máx. (H)")}${campo("opt_min_h","Óptimo mín. (H)")}${campo("opt_max_h","Óptimo máx. (H)")}
+    ${bloque("ref","Referencia (hombres)").replace('data-pre="ref"','data-pre="ref_h"')}${bloque("opt","Óptimo (hombres)").replace('data-pre="opt"','data-pre="opt_h"')}
     <label class="f wide">Notas<input name="notas" value="${esc(d.notas)}"></label>
     <div class="wide row"><button class="btn pri right">Guardar</button></div></form>`);
-  $("#fd").onsubmit = async e => { e.preventDefault(); const x=Object.fromEntries(new FormData(e.target)); for(const k in x) if(x[k]==="") x[k]=null; x.rangos_revisados=true;
+  // los bloques de hombres arrancan con sus propios valores
+  [["ref_h","ref_min_h","ref_max_h"],["opt_h","opt_min_h","opt_max_h"]].forEach(([pre,ka,kb]) => { const box=$(`[data-pre="${pre}"]`); const a=d[ka], b=d[kb];
+    $(".rg-a",box).value = a??""; $(".rg-b",box).value = b??""; $(".rg-t",box).value = tipoDe(a,b); });
+  const ajustar = box => { const t=$(".rg-t",box).value; $(".rg-a",box).hidden = !(t==="entre"||t==="mayor"); $(".rg-b",box).hidden = !(t==="entre"||t==="menor"); $(".rg-y",box).hidden = t!=="entre"; };
+  document.querySelectorAll(".rgbox").forEach(box => { ajustar(box); $(".rg-t",box).onchange = () => ajustar(box); });
+  $("#fd").onsubmit = async e => { e.preventDefault();
+    const x = { unidad: $("#fd [name=unidad]").value.trim() || null, notas: $("#fd [name=notas]").value.trim() || null, rangos_revisados: true };
+    for(const box of document.querySelectorAll(".rgbox")){
+      const pre = box.dataset.pre, suf = pre.endsWith("_h") ? "_h" : "", base = pre.replace("_h","");
+      const t = $(".rg-t",box).value, a = $(".rg-a",box).value, b = $(".rg-b",box).value;
+      let mn = (t==="entre"||t==="mayor") && a!=="" ? Number(a) : null, mx = (t==="entre"||t==="menor") && b!=="" ? Number(b) : null;
+      if(t==="entre" && (mn==null||mx==null)) return toast("Completá los dos valores del rango “entre”.");
+      if(t==="entre" && mn>mx) return toast("En un rango “entre”, el primer número tiene que ser menor que el segundo.");
+      if((t==="mayor"&&mn==null)||(t==="menor"&&mx==null)) return toast("Falta el número del rango.");
+      x[`${base}_min${suf}`] = mn; x[`${base}_max${suf}`] = mx;
+    }
     const { error } = await sb.from("determinaciones").update(x).eq("id",d.id); if(error) return fail(error); cerrarModal(); toast("Rangos guardados"); cache.determinaciones=null; render(); };
 }
 
