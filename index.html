@@ -211,7 +211,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31u";
+const APP_VERSION = "2026-10-31v";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -443,7 +443,7 @@ async function modalTurno(t){
     <div id="tpac"></div>
     <div class="fields">
       <label class="f">Fecha<input name="fecha" type="date" required value="${t.fecha||hoy()}"></label>
-      <label class="f">Hora<select name="hora" required><option value="">— elegir —</option>${opcionesHora((t.hora||"").slice(0,5), 5)}</select></label>
+      <label class="f">Hora<select name="hora" required><option value="">— elegir —</option>${opcionesHora((t.hora||"").slice(0,5), 30)}</select></label>
       <label class="f">Duración (min)<select name="duracion">${[15,20,30,40,45,60,75,90,120].map(m=>`<option ${m===dur?"selected":""}>${m}</option>`).join("")}</select></label>
       <label class="f">Área<select name="area"><option value=""></option>${["Estética","Funcional","Funcional y Estética"].map(a=>`<option ${t.area===a?"selected":""}>${a}</option>`).join("")}</select></label>
       <label class="f">Modalidad<select name="modalidad">${["Presencial","Virtual"].map(m=>`<option ${(t.modalidad||"Presencial")===m?"selected":""}>${m}</option>`).join("")}</select></label>
