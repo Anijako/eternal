@@ -211,7 +211,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31p";
+const APP_VERSION = "2026-10-31q";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -645,7 +645,7 @@ async function tabVisitas(c, p){
   const { data } = await sb.from("v_visitas").select("*").eq("paciente_id", p.id).order("fecha",{ascending:false}).order("creado",{ascending:false});
   const total = data.reduce((a,x)=>a+Number(x.total||0),0);
   c.innerHTML = `<div class="row" style="margin-bottom:10px"><span class="muted">Total facturado: <b style="color:var(--ink)">${pesos(total)}</b></span><button class="btn right" id="bentp">Entrega de producto</button><button class="btn pri" id="bnv">+ Nueva visita</button></div>
-    <div class="card tight">${data.length?`<ul class="list">${data.map(x=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left;cursor:pointer" data-v="${x.id}"><div class="main"><div class="t">${fecha(x.fecha)} ${areaPill(x.area)}</div><div class="s">${esc(x.detalle_items||x.motivo||"")}${x.observaciones?" · "+esc(x.observaciones):""}</div></div><div class="r">${pesos(x.total)}</div></button></li>`).join("")}</ul>`:`<div class="empty">Sin visitas.</div>`}</div>`;
+    <div class="card tight">${data.length?`<ul class="list">${data.map(x=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left;cursor:pointer" data-v="${x.id}"><div class="main"><div class="t">${fecha(x.fecha)} ${areaPill(x.area)}</div><div class="s">${esc(x.detalle_items||x.motivo||"")}${x.observaciones?" · "+esc(x.observaciones):""}</div>${x.insumos_detalle?`<div class="s" style="white-space:normal">Activos / insumos: ${esc(x.insumos_detalle)}</div>`:""}</div><div class="r">${pesos(x.total)}</div></button></li>`).join("")}</ul>`:`<div class="empty">Sin visitas.</div>`}</div>`;
   $("#bnv").onclick = () => modalVisita(p);
   $("#bentp").onclick = () => modalEntrega(p);
   c.querySelectorAll("[data-v]").forEach(b => b.onclick = () => modalVisita(p, data.find(x=>x.id===b.dataset.v)));
@@ -663,7 +663,8 @@ async function modalVisita(p, visita=null, preset={}){
       <label class="f">Qué<select class="it-ref"></select><input class="it-desc" placeholder="Descripción libre (opcional)" value="${esc(it.descripcion)}" style="margin-top:6px">${(unidadesPorItem[it.id]||[]).length?`<span class="muted" style="font-weight:400;font-size:12.5px">Unidades: ${(unidadesPorItem[it.id]).map(esc).join(", ")}</span>`:""}</label>
       <label class="f">Cant.<input class="it-cant" type="number" min="0" step="any" value="${it.cantidad??1}"></label>
       <label class="f">Monto $<input class="it-monto" type="number" min="0" step="any" inputmode="decimal" value="${it.monto??""}"></label>
-      <button type="button" class="iconbtn x" title="Quitar">×</button></div>`;
+      <button type="button" class="iconbtn x" title="Quitar">×</button>
+      <div class="it-ins" style="grid-column:1/-1" hidden></div></div>`;
   abrirModal(visita?"Visita del "+fecha(visita.fecha):"Nueva visita · "+p.nombre, `
     <form id="fv" class="grid">
       <div class="fields">
@@ -672,7 +673,7 @@ async function modalVisita(p, visita=null, preset={}){
         <label class="f wide">Motivo / resumen<input name="motivo" value="${esc(visita?.motivo||preset.motivo)}"></label>
       </div>
       ${visita?.total_historico?`<p class="muted" style="margin:0">Registro de la facturación anterior: ${esc(visita.motivo||"")} · ${pesos(visita.total_historico)}</p>`:""}
-      <div><h3>Tratamientos, productos y medicamentos</h3><div id="its"></div><button type="button" class="btn ghost" id="badd">+ Agregar ítem</button>${insumos.length?`<p class="muted" style="font-size:13px;margin:6px 0 0">Insumos descontados del stock: ${insumos.map(i=>esc((i.productos?.nombre||"")+(i.cantidad?" ×"+num(i.cantidad):"")+(i.observacion?" ("+i.observacion+")":""))).join(", ")}</p>`:""}</div>
+      <div><h3>Tratamientos, productos y medicamentos</h3><div id="its"></div><button type="button" class="btn ghost" id="badd">+ Agregar ítem</button>${insumos.some(i=>!i.producto_id)?`<p style="font-size:13px;margin:6px 0 0;color:var(--warn)">${insumos.filter(i=>!i.producto_id).map(i=>esc(i.observacion||"")).join(" · ")}</p>`:""}</div>
       <label class="f">Observaciones<textarea name="observaciones">${esc(visita?.observaciones)}</textarea></label>
       <div class="row"><b>Total: <span id="vtot">$ 0</span></b><span class="right"></span>${visita?`<button type="button" class="btn danger" id="bdelv">Eliminar visita</button>`:""}<button class="btn pri" type="submit">Guardar visita</button></div>
     </form>`);
@@ -680,12 +681,28 @@ async function modalVisita(p, visita=null, preset={}){
   const opciones = (tipo) => tipo==="Tratamiento"
     ? `<option value="">— elegir tratamiento —</option>`+trats.filter(t=>t.activo).map(t=>`<option value="${t.id}" data-precio="${t.precio??""}">${esc(t.nombre)}${t.area?" ("+t.area+")":""}</option>`).join("")
     : `<option value="">— elegir producto —</option>`+["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(x=>x.linea===l&&x.activo).map(x=>`<option value="${x.id}" data-precio="${x.precio??""}">${esc(prodLabel(x))} · stock ${num(x.stock_actual)}</option>`).join("")+`</optgroup>`).join("");
+  const prodOpts = sel => `<option value="">— elegir —</option>` + ["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(x=>x.linea===l&&x.activo).map(x=>`<option value="${x.id}" ${x.id===sel?"selected":""}>${esc(prodLabel(x))} · stock ${num(x.stock_actual)}</option>`).join("")+`</optgroup>`).join("");
+  const pintarIns = row => { const box2 = $(".it-ins",row); const esTrat = $(".it-tipo",row).value==="Tratamiento" && $(".it-ref",row).value;
+    box2.hidden = !esTrat; if(!esTrat) return;
+    const L = row._ins || [];
+    box2.innerHTML = `<div style="background:var(--surface2);border-radius:10px;padding:8px 10px"><div style="font-size:13px;font-weight:600;margin-bottom:4px">Activos e insumos utilizados <span class="muted" style="font-weight:400">(se descuentan del stock y quedan en el historial)</span></div>
+      ${L.map((x,i)=>`<div class="row" style="flex-wrap:nowrap;margin-bottom:4px"><select data-ip="${i}" style="min-height:38px;padding:6px 8px">${prodOpts(x.producto_id)}</select><input data-ic="${i}" type="number" min="1" step="1" value="${x.cantidad}" style="width:70px;min-height:38px"><button type="button" class="iconbtn" data-ix="${i}">×</button></div>`).join("") || `<div class="muted" style="font-size:13px">Sin insumos.</div>`}
+      <button type="button" class="btn ghost" data-iadd style="min-height:36px;padding:4px 8px">+ Activo / insumo</button></div>`;
+    box2.querySelectorAll("[data-ip]").forEach(e=>e.onchange=()=>{ row._ins[+e.dataset.ip].producto_id = e.value; });
+    box2.querySelectorAll("[data-ic]").forEach(e=>e.oninput=()=>{ row._ins[+e.dataset.ic].cantidad = Math.max(1, parseInt(e.value)||1); });
+    box2.querySelectorAll("[data-ix]").forEach(e=>e.onclick=()=>{ row._ins.splice(+e.dataset.ix,1); pintarIns(row); });
+    $("[data-iadd]",box2).onclick = () => { (row._ins ||= []).push({ producto_id:"", cantidad:1 }); pintarIns(row); }; };
+  const cargarInsDefault = async row => { const tid = $(".it-ref",row).value; if(!tid){ row._ins = null; return pintarIns(row); }
+    const { data } = await sb.from("tratamiento_insumos").select("producto_id,cantidad").eq("tratamiento_id", tid);
+    const k = Math.max(1, parseInt($(".it-cant",row).value)||1); row._ins = (data||[]).map(x=>({ producto_id:x.producto_id, cantidad:x.cantidad*k })); pintarIns(row); };
   const cablear = (row, it={}) => {
     const tipo=$(".it-tipo",row), ref=$(".it-ref",row), monto=$(".it-monto",row), cant=$(".it-cant",row);
     const llenar = () => { ref.innerHTML = opciones(tipo.value); };
     llenar(); ref.value = it.tratamiento_id || it.producto_id || "";
-    tipo.onchange = () => { llenar(); total(); };
-    ref.onchange = () => { const pr = ref.selectedOptions[0]?.dataset.precio; if(pr && !monto.value) monto.value = Number(pr) * (Number(cant.value)||1); total(); };
+    if(it.id && it.tipo==="Tratamiento"){ row._ins = insumos.filter(i=>i.item_padre===it.id && i.producto_id).map(i=>({ producto_id:i.producto_id, cantidad:Number(i.cantidad)||1 })); pintarIns(row); }
+    else if(!it.id && tipo.value==="Tratamiento" && ref.value) cargarInsDefault(row);
+    tipo.onchange = () => { llenar(); row._ins = null; pintarIns(row); total(); };
+    ref.onchange = () => { const pr = ref.selectedOptions[0]?.dataset.precio; if(pr && !monto.value) monto.value = Number(pr) * (Number(cant.value)||1); if(tipo.value==="Tratamiento") cargarInsDefault(row); total(); };
     monto.oninput = cant.oninput = total;
     $(".x",row).onclick = () => { row.remove(); total(); };
   };
@@ -700,7 +717,8 @@ async function modalVisita(p, visita=null, preset={}){
       const tipo=$(".it-tipo",r).value, ref=$(".it-ref",r).value||null;
       return { tipo, tratamiento_id: tipo==="Tratamiento"?ref:null, producto_id: tipo!=="Tratamiento"?ref:null,
         descripcion: $(".it-desc",r).value.trim() || null, cantidad: Number($(".it-cant",r).value||1), monto: Number($(".it-monto",r).value||0),
-        unidades_pedidas: (tipo!=="Tratamiento" && ref && ref===r.dataset.prod0 && r.dataset.u) ? r.dataset.u.split("|").slice(0, Number($(".it-cant",r).value||1)) : null };
+        unidades_pedidas: (tipo!=="Tratamiento" && ref && ref===r.dataset.prod0 && r.dataset.u) ? r.dataset.u.split("|").slice(0, Number($(".it-cant",r).value||1)) : null,
+        insumos: (tipo==="Tratamiento" && ref && Array.isArray(r._ins)) ? r._ins.filter(x=>x.producto_id) : null };
     }).filter(x => x.tratamiento_id || x.producto_id || x.descripcion || x.monto);
     let vid = visita?.id;
     if(visita){ const r = await sb.from("visitas").update(d).eq("id",vid); if(r.error) return fail(r.error);
