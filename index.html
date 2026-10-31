@@ -211,7 +211,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31r";
+const APP_VERSION = "2026-10-31s";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -367,7 +367,11 @@ async function mensajeTurno(t){
   const d = dDe(t.fecha);
   const nombre = (t.paciente||"").split(" ").slice(1).join(" ") || t.paciente || "";
   return plantilla.replaceAll("{nombre}", nombre).replaceAll("{paciente}", t.paciente||"").replaceAll("{dia}", DIAS[d.getDay()].toLowerCase())
-    .replaceAll("{fecha}", `${d.getDate()}/${String(d.getMonth()+1).padStart(2,"0")}`).replaceAll("{hora}", t.hora.slice(0,5)).replaceAll("{motivo}", t.motivo||"");
+    .replaceAll("{fecha}", `${d.getDate()}/${String(d.getMonth()+1).padStart(2,"0")}`).replaceAll("{hora}", t.hora.slice(0,5)).replaceAll("{motivo}", t.motivo||"")
+    .replaceAll("{modalidad}", (t.modalidad||"Presencial").toLowerCase())
+    .replaceAll("{enlace}", t.modalidad==="Virtual" && t.enlace ? ` Ingresá desde este enlace: ${t.enlace}.` : "")
+    + (!plantilla.includes("{modalidad}") ? ` Modalidad: ${(t.modalidad||"Presencial").toLowerCase()}.` : "")
+    + (!plantilla.includes("{enlace}") && t.modalidad==="Virtual" && t.enlace ? ` Enlace: ${t.enlace}` : "");
 }
 async function enviarWhatsApp(t){
   let tel = telWhatsApp(t.telefono);
@@ -411,11 +415,11 @@ async function vAgenda(v, semana){
         g += `<button class="ag-c ${abierto?"":"cerrado"} ${m%60===0?"hr":""}" style="grid-row:${r+2};grid-column:${i+2}" data-f="${f}" data-h="${hDe(m)}" aria-label="Nuevo turno ${fechaLarga(f)} ${hDe(m)}"></button>`; }); });
     ts.forEach(t=>{ const i = diasSemana.indexOf(t.fecha); if(i<0) return; const r0 = Math.floor((minDe(t.hora)-slots[0])/dur);
       const span = Math.max(1, Math.ceil(t.duracion/dur));
-      g += `<button class="ag-t1 ${estadoTurnoClase(t.estado)} ${t.estado==="Cancelado"?"canc":""}" style="grid-column:${i+2};grid-row:${r0+2} / span ${span}" data-t="${t.id}"><b>${t.hora.slice(0,5)}</b> ${esc(t.paciente)}${t.motivo?`<span> · ${esc(t.motivo)}</span>`:""}${t.whatsapp_enviado?" ✓":""}</button>`; });
+      g += `<button class="ag-t1 ${estadoTurnoClase(t.estado)} ${t.estado==="Cancelado"?"canc":""}" style="grid-column:${i+2};grid-row:${r0+2} / span ${span}" data-t="${t.id}"><b>${t.hora.slice(0,5)}</b> ${t.modalidad==="Virtual"?"💻 ":""}${esc(t.paciente)}${t.motivo?`<span> · ${esc(t.motivo)}</span>`:""}${t.whatsapp_enviado?" ✓":""}</button>`; });
     $("#agw").innerHTML = g + `</div><p class="muted" style="font-size:13px">Tocá un horario libre para dar un turno. Las franjas grises están fuera del horario de atención (se configura en Catálogos → Agenda).</p>`;
   } else {
     $("#agw").innerHTML = [0,1,2,3,4,5,6].map(i=>masDias(lun,i)).filter(f=>diasSemana.includes(f)).map(f=>{ const del = ts.filter(t=>t.fecha===f);
-      return `<div class="card tight" style="margin-bottom:10px"><div class="row" style="padding:10px 14px"><b>${fechaLarga(f)}</b><button class="btn ghost right" data-nf="${f}">+ Turno</button></div>${del.length?`<ul class="list">${del.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left" data-t="${t.id}"><div class="main"><div class="t">${t.hora.slice(0,5)} · ${esc(t.paciente)}</div><div class="s">${esc(t.motivo||"")}${t.whatsapp_enviado?" · WhatsApp enviado":""}</div></div><span class="pill ${estadoTurnoClase(t.estado)}">${t.estado}</span></button></li>`).join("")}</ul>`:`<div class="empty" style="padding:12px">Sin turnos</div>`}</div>`; }).join("");
+      return `<div class="card tight" style="margin-bottom:10px"><div class="row" style="padding:10px 14px"><b>${fechaLarga(f)}</b><button class="btn ghost right" data-nf="${f}">+ Turno</button></div>${del.length?`<ul class="list">${del.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left" data-t="${t.id}"><div class="main"><div class="t">${t.hora.slice(0,5)} · ${t.modalidad==="Virtual"?"💻 ":""}${esc(t.paciente)}</div><div class="s">${esc(t.motivo||"")}${t.whatsapp_enviado?" · WhatsApp enviado":""}</div></div><span class="pill ${estadoTurnoClase(t.estado)}">${t.estado}</span></button></li>`).join("")}</ul>`:`<div class="empty" style="padding:12px">Sin turnos</div>`}</div>`; }).join("");
   }
   v.querySelectorAll(".ag-c").forEach(b=>b.onclick=()=>modalTurno({ fecha:b.dataset.f, hora:b.dataset.h }));
   v.querySelectorAll("[data-nf]").forEach(b=>b.onclick=()=>modalTurno({ fecha:b.dataset.nf }));
@@ -436,6 +440,8 @@ async function modalTurno(t){
       <label class="f">Hora<input name="hora" type="time" step="300" required value="${(t.hora||"").slice(0,5)}"></label>
       <label class="f">Duración (min)<select name="duracion">${[15,20,30,40,45,60,75,90,120].map(m=>`<option ${m===dur?"selected":""}>${m}</option>`).join("")}</select></label>
       <label class="f">Área<select name="area"><option value=""></option>${["Estética","Funcional","Funcional y Estética"].map(a=>`<option ${t.area===a?"selected":""}>${a}</option>`).join("")}</select></label>
+      <label class="f">Modalidad<select name="modalidad">${["Presencial","Virtual"].map(m=>`<option ${(t.modalidad||"Presencial")===m?"selected":""}>${m}</option>`).join("")}</select></label>
+      <label class="f wide" id="tenl" ${(t.modalidad||"Presencial")==="Virtual"?"":"hidden"}>Enlace de la videollamada (opcional)<input name="enlace" value="${esc(t.enlace)}" placeholder="https://meet.google.com/… o WhatsApp"></label>
       <label class="f wide">Motivo / tratamiento<input name="motivo" value="${esc(t.motivo)}" placeholder="ej. Sueroterapia, Facial, Consulta"></label>
       ${nuevo?"":`<label class="f">Estado<select name="estado">${ESTADOS_T.map(s=>`<option ${t.estado===s?"selected":""}>${s}</option>`).join("")}</select></label>`}
       <label class="f wide">Notas<input name="notas" value="${esc(t.notas)}"></label>
@@ -445,8 +451,9 @@ async function modalTurno(t){
     ${nuevo?"":`<div class="card" style="background:var(--accent-soft);border-color:transparent"><div class="row">
       ${waUrl ? `<a class="btn pri" id="twa" href="${waUrl}" target="_blank" rel="noopener">Enviar por WhatsApp${t.whatsapp_enviado?" (ya enviado)":""}</a>`
         : `<div class="row" style="flex-wrap:nowrap;flex:1;min-width:280px"><input id="ttel" type="tel" placeholder="Celular del paciente (ej. 11 5555-1234)"><button type="button" class="btn pri" id="ttelok">Guardar celular</button></div>`}
-      <button type="button" class="btn" id="tics">Agregar a mi calendario</button>
-      <button type="button" class="btn" id="tvis">Paciente atendido → cargar visita</button></div></div>`}
+
+      <button type="button" class="btn" id="tvis">Paciente atendido → cargar visita</button></div>
+      <p class="muted" style="font-size:12.5px;margin:8px 0 0">Este turno aparece solo en el calendario “Eternal · Turnos” del iPad (si está suscripto). Los cambios se reflejan en 15 a 60 minutos.</p></div>`}
   </form>`);
   const pintaPac = () => {
     if(pac){ $("#tpac").innerHTML = `<div class="row"><div><div class="muted" style="font-size:13px;font-weight:600">PACIENTE</div><b style="font-size:18px">${esc(pac.nombre)}</b>${pac.telefono?` <span class="muted">· ${esc(pac.telefono)}</span>`:""}</div><button type="button" class="btn ghost right" id="tcamb">Cambiar</button></div>`; $("#tcamb").onclick=()=>{ pac=null; pintaPac(); }; return; }
@@ -470,6 +477,7 @@ async function modalTurno(t){
     (data||[]).filter(x=>x.id!==t.id && minDe(x.hora) < minDe(h)+d && minDe(h) < minDe(x.hora)+x.duracion).forEach(x=>avisos.push(`Se superpone con ${x.paciente} (${x.hora.slice(0,5)}).`));
     $("#taviso").textContent = avisos.join(" "); };
   ["fecha","hora","duracion"].forEach(n=>$(`#fturno [name=${n}]`).addEventListener("change", chequear)); chequear();
+  $("#fturno [name=modalidad]").onchange = e => { $("#tenl").hidden = e.target.value!=="Virtual"; };
   $("#fturno").onsubmit = async e => { e.preventDefault(); if(!pac) return toast("Elegí o creá el paciente.");
     const d = Object.fromEntries(new FormData(e.target)); for(const k in d) if(d[k]==="") d[k]=null; d.duracion = Number(d.duracion); d.paciente_id = pac.id;
     const r = nuevo ? await sb.from("turnos").insert(d).select("*").single() : await sb.from("turnos").update(d).eq("id", t.id).select("*").single(); if(r.error) return fail(r.error);
@@ -482,7 +490,7 @@ async function modalTurno(t){
     else $("#ttelok").onclick = async () => { const v = $("#ttel").value.trim(); if(!telWhatsApp(v)) return toast("Ese número no parece válido. Escribilo con característica, ej. 11 5555-1234.");
       const { error } = await sb.from("pacientes").update({ telefono: v }).eq("id", t.paciente_id); if(error) return fail(error);
       toast("Celular guardado"); modalTurno({ ...t, telefono: v }); };
-    $("#tics").onclick = () => icsTurno(t);
+
     $("#tvis").onclick = async () => { await sb.from("turnos").update({ estado:"Atendido" }).eq("id", t.id); const { data: p } = await sb.from("v_pacientes").select("*").eq("id", t.paciente_id).single(); cerrarModal(); location.hash = `#/p/${t.paciente_id}/visitas`; setTimeout(()=>modalVisita(p, null, { fecha: t.fecha, motivo: t.motivo, area: t.area }), 600); };
   }
 }
@@ -494,7 +502,7 @@ async function pintaAgendaCfg(c){
   c.innerHTML = `<form id="fcfg" class="grid">
     <div class="card"><h2>Horario de atención</h2><table>${[1,2,3,4,5,6,0].map(w=>{ const r=cfg.dias?.[String(w)]; return `<tr><td style="width:140px"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-w="${w}" ${r?"checked":""} style="width:auto;min-height:0"> ${DIAS[w]}</label></td><td><input type="time" step="900" data-wd="${w}" value="${r?r[0]:"09:00"}" style="width:auto"></td><td>a</td><td><input type="time" step="900" data-wh="${w}" value="${r?r[1]:"19:00"}" style="width:auto"></td></tr>`; }).join("")}</table>
       <label class="f" style="margin-top:10px;max-width:260px">Duración habitual de un turno<select id="cdur">${[15,20,30,40,45,60].map(m=>`<option value="${m}" ${Number(cfg.duracion)===m?"selected":""}>${m} minutos</option>`).join("")}</select></label></div>
-    <div class="card"><h2>Mensaje de WhatsApp</h2><p class="muted" style="margin-top:0">Se puede usar {nombre}, {dia}, {fecha}, {hora} y {motivo}; se reemplazan solos.</p><textarea id="cmsg" rows="4">${esc(msg)}</textarea></div>
+    <div class="card"><h2>Mensaje de WhatsApp</h2><p class="muted" style="margin-top:0">Se puede usar {nombre}, {dia}, {fecha}, {hora}, {motivo}, {modalidad} (presencial / virtual) y {enlace} (el link si es virtual); se reemplazan solos.</p><textarea id="cmsg" rows="4">${esc(msg)}</textarea></div>
     <div class="row"><button class="btn pri right">Guardar configuración</button></div></form>
     <div class="card" style="margin-top:14px"><h2>Ver los turnos en el calendario del iPad / iPhone</h2>
       <p>Suscribí el calendario una sola vez y los turnos que cargues aparecen solos en el calendario del dispositivo (se actualiza cada 15–60 minutos).</p>
@@ -551,7 +559,7 @@ async function vInicio(v){
     <div id="reshome"></div>
     <div class="row" style="margin-bottom:16px"><button class="btn pri" id="hent">Entrega de producto</button><button class="btn" id="hcomp">+ Cargar compra</button></div>
     <div class="card tight" style="margin-bottom:16px"><div style="padding:14px 16px 4px" class="row"><h2 style="margin:0">Turnos de esta semana</h2><a class="btn ghost right" href="#/agenda">Ver agenda</a><button class="btn pri" id="hturno">+ Turno</button></div>
-      ${tsem.length?`<ul class="list">${tsem.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left" data-ht="${t.id}"><div class="main"><div class="t">${fechaLarga(t.fecha)} · ${t.hora.slice(0,5)} · ${esc(t.paciente)}</div><div class="s">${esc(t.motivo||"")}${t.whatsapp_enviado?" · WhatsApp enviado ✓":""}</div></div><span class="pill ${estadoTurnoClase(t.estado)}">${t.estado}</span></button></li>`).join("")}</ul>`:`<div class="empty">No hay turnos de acá al domingo.</div>`}</div>
+      ${tsem.length?`<ul class="list">${tsem.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left" data-ht="${t.id}"><div class="main"><div class="t">${fechaLarga(t.fecha)} · ${t.hora.slice(0,5)} · ${t.modalidad==="Virtual"?"💻 ":""}${esc(t.paciente)}</div><div class="s">${esc(t.motivo||"")}${t.whatsapp_enviado?" · WhatsApp enviado ✓":""}</div></div><span class="pill ${estadoTurnoClase(t.estado)}">${t.estado}</span></button></li>`).join("")}</ul>`:`<div class="empty">No hay turnos de acá al domingo.</div>`}</div>
     <div class="grid g3" style="margin-bottom:16px">
       <div class="card stat"><div class="n">${pesos(tot)}</div><div class="l">Facturado este mes · ${vm.length} visitas</div></div>
       <div class="card stat"><div class="n">${pesos(est)}</div><div class="l">${areaPill("Estética")} este mes</div></div>
