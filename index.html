@@ -216,7 +216,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-11-01f";
+const APP_VERSION = "2026-11-01g";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -359,6 +359,10 @@ const hDe = m => String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padSt
 // Selector de horario en formato 24 hs (el campo "time" del iPad muestra AM/PM según la configuración del equipo)
 const opcionesHora = (sel, paso=15, desde=6*60, hasta=23*60) => { const L=[]; for(let m=desde; m<=hasta; m+=paso) L.push(hDe(m)); if(sel && !L.includes(sel)) { L.push(sel); L.sort(); }
   return L.map(h=>`<option value="${h}" ${h===sel?"selected":""}>${h} hs</option>`).join(""); };
+// Sábado o domingo: por defecto se muestra la semana hábil siguiente
+const esFinde = (iso=hoy()) => [0,6].includes(dDe(iso).getDay());
+const semanaPorDefecto = () => esFinde() ? masDias(lunesDe(hoy()), 7) : lunesDe(hoy());
+const proximoDiaHabil = (iso=hoy()) => { let f = masDias(iso, 1); while(esFinde(f)) f = masDias(f, 1); return f; };
 const fechaLarga = iso => { const d = dDe(iso); return `${DIAS[d.getDay()]} ${d.getDate()}/${String(d.getMonth()+1).padStart(2,"0")}`; };
 async function leerConfig(clave, def){ const { data } = await sb.from("config").select("valor").eq("clave", clave).maybeSingle(); return data ? data.valor : def; }
 async function configAgenda(){ return await leerConfig("agenda", { duracion:30, dias:{ "1":["09:00","19:00"],"2":["09:00","19:00"],"3":["09:00","19:00"],"4":["09:00","19:00"],"5":["09:00","19:00"] } }); }
@@ -404,7 +408,7 @@ function icsTurno(t){
 
 async function vAgenda(v, semana){
   const cfg = await configAgenda();
-  const lun = lunesDe(semana || hoy()), dom = masDias(lun, 6);
+  const lun = semana ? lunesDe(semana) : semanaPorDefecto(), dom = masDias(lun, 6);
   const { data: ts, error } = await sb.from("v_turnos").select("*").gte("fecha", lun).lte("fecha", dom).order("fecha").order("hora"); if(error) throw error;
   const dur = Number(cfg.duracion)||30;
   const diasSemana = [0,1,2,3,4,5,6].map(i=>masDias(lun,i)).filter(f => { const wd = String(dDe(f).getDay()); return cfg.dias?.[wd] || ts.some(t=>t.fecha===f); });
@@ -412,8 +416,8 @@ async function vAgenda(v, semana){
   const slots = []; for(let m = Math.floor(ini/dur)*dur; m < fin; m += dur) slots.push(m);
   const titulo = `${dDe(lun).getDate()}/${String(dDe(lun).getMonth()+1).padStart(2,"0")} al ${dDe(dom).getDate()}/${String(dDe(dom).getMonth()+1).padStart(2,"0")}`;
   const activos = ts.filter(t=>t.estado!=="Cancelado");
-  v.innerHTML = `<div class="row"><h1>Agenda</h1><span class="right"></span><button class="btn" id="brec">Recordatorios de mañana</button><button class="btn pri" id="bnt2">+ Nuevo turno</button></div>
-    <div class="row" style="margin:6px 0 14px"><a class="btn" href="#/agenda/${masDias(lun,-7)}">‹</a><b style="font-size:18px">Semana del ${titulo}</b><a class="btn" href="#/agenda/${masDias(lun,7)}">›</a>${lun!==lunesDe(hoy())?`<a class="btn ghost" href="#/agenda">Hoy</a>`:""}<span class="right muted">${activos.length} turnos</span></div>
+  v.innerHTML = `<div class="row"><h1>Agenda</h1><span class="right"></span><button class="btn" id="brec">${esFinde()?"Recordatorios del lunes":"Recordatorios de mañana"}</button><button class="btn pri" id="bnt2">+ Nuevo turno</button></div>
+    <div class="row" style="margin:6px 0 14px"><a class="btn" href="#/agenda/${masDias(lun,-7)}">‹</a><b style="font-size:18px">Semana del ${titulo}</b><a class="btn" href="#/agenda/${masDias(lun,7)}">›</a>${lun!==semanaPorDefecto()?`<a class="btn ghost" href="#/agenda">${esFinde()?"Próxima semana":"Hoy"}</a>`:""}<span class="right muted">${activos.length} turnos</span></div>
     <div id="agw"></div>`;
   $("#brec").onclick = () => modalRecordatorios();
   $("#bnt2").onclick = () => modalTurno({ fecha: lun <= hoy() && hoy() <= dom ? hoy() : lun });
@@ -509,11 +513,11 @@ async function modalTurno(t){
 
 /* Recordatorios: lista de turnos de un día con su WhatsApp listo para enviar de a uno */
 async function modalRecordatorios(fechaSel){
-  const f = fechaSel || masDias(hoy(), 1);
+  const f = fechaSel || proximoDiaHabil();
   const plantilla = await leerConfig("mensaje_recordatorio", "Hola {nombre}! Te recuerdo tu turno {modalidad} {cuando} a las {hora} hs con la Dra. Analía Jakowluk. Por favor respondé SÍ para confirmar. ¡Gracias!");
   const { data: ts } = await sb.from("v_turnos").select("*").eq("fecha", f).neq("estado","Cancelado").order("hora");
   const d = dDe(f);
-  const cuando = f===masDias(hoy(),1) ? "de mañana" : f===hoy() ? "de hoy" : `del ${DIAS[d.getDay()].toLowerCase()} ${d.getDate()}/${String(d.getMonth()+1).padStart(2,"0")}`;
+  const cuando = f===masDias(hoy(),1) ? "de mañana" : (esFinde() && f===proximoDiaHabil()) ? `del ${DIAS[dDe(f).getDay()].toLowerCase()}` : f===hoy() ? "de hoy" : `del ${DIAS[d.getDay()].toLowerCase()} ${d.getDate()}/${String(d.getMonth()+1).padStart(2,"0")}`;
   const texto = t => plantilla.replaceAll("{nombre}", (t.paciente||"").split(" ").slice(1).join(" ") || t.paciente || "").replaceAll("{paciente}", t.paciente||"")
     .replaceAll("{cuando}", cuando).replaceAll("{dia}", DIAS[d.getDay()].toLowerCase()).replaceAll("{fecha}", `${d.getDate()}/${String(d.getMonth()+1).padStart(2,"0")}`)
     .replaceAll("{hora}", t.hora.slice(0,5)).replaceAll("{motivo}", t.motivo||"").replaceAll("{modalidad}", (t.modalidad||"Presencial").toLowerCase())
@@ -612,7 +616,7 @@ async function vInicio(v){
     sb.from("v_visitas").select("total,area,fecha").gte("fecha", ini),
     catalogo("productos", true),
     sb.from("v_visitas").select("id,fecha,paciente,paciente_id,area,motivo,detalle_items,total").order("fecha",{ascending:false}).order("creado",{ascending:false}).limit(8),
-    sb.from("v_turnos").select("*").gte("fecha", hoy()).lte("fecha", masDias(lunesDe(hoy()),6)).neq("estado","Cancelado").order("fecha").order("hora")
+    sb.from("v_turnos").select("*").gte("fecha", hoy()).lte("fecha", masDias(semanaPorDefecto(),6)).neq("estado","Cancelado").order("fecha").order("hora")
   ]);
   alertasStock = prods.filter(x=>x.activo && x.alerta).length;
   const tot = vm.reduce((a,x)=>a+Number(x.total||0),0);
@@ -625,8 +629,8 @@ async function vInicio(v){
     <div class="search card" style="padding:0;border:none;background:none;margin-bottom:16px">${ICON.search}<input id="qhome" placeholder="Buscar paciente por apellido, nombre o DNI" autocomplete="off"></div>
     <div id="reshome"></div>
     <div class="row" style="margin-bottom:16px"><button class="btn pri" id="hent">Entrega de producto</button><button class="btn" id="hcomp">+ Cargar compra</button></div>
-    <div class="card tight" style="margin-bottom:16px"><div style="padding:14px 16px 4px" class="row"><h2 style="margin:0">Turnos de esta semana</h2><a class="btn ghost right" href="#/agenda">Ver agenda</a><button class="btn" id="hrec">Recordatorios</button><button class="btn pri" id="hturno">+ Turno</button></div>
-      ${tsem.length?`<ul class="list">${tsem.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left" data-ht="${t.id}"><div class="main"><div class="t">${fechaLarga(t.fecha)} · ${t.hora.slice(0,5)} · ${t.modalidad==="Virtual"?"💻 ":""}${esc(t.paciente)}</div><div class="s">${esc(t.motivo||"")}${t.whatsapp_enviado?" · WhatsApp enviado ✓":""}</div></div><span class="pill ${estadoTurnoClase(t.estado)}">${t.estado}</span></button></li>`).join("")}</ul>`:`<div class="empty">No hay turnos de acá al domingo.</div>`}</div>
+    <div class="card tight" style="margin-bottom:16px"><div style="padding:14px 16px 4px" class="row"><h2 style="margin:0">${esFinde()?"Turnos de la próxima semana":"Turnos de esta semana"}</h2><a class="btn ghost right" href="#/agenda">Ver agenda</a><button class="btn" id="hrec">Recordatorios</button><button class="btn pri" id="hturno">+ Turno</button></div>
+      ${tsem.length?`<ul class="list">${tsem.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left" data-ht="${t.id}"><div class="main"><div class="t">${fechaLarga(t.fecha)} · ${t.hora.slice(0,5)} · ${t.modalidad==="Virtual"?"💻 ":""}${esc(t.paciente)}</div><div class="s">${esc(t.motivo||"")}${t.whatsapp_enviado?" · WhatsApp enviado ✓":""}</div></div><span class="pill ${estadoTurnoClase(t.estado)}">${t.estado}</span></button></li>`).join("")}</ul>`:`<div class="empty">${esFinde()?"No hay turnos para la próxima semana.":"No hay turnos de acá al domingo."}</div>`}</div>
     <button class="btn ghost" id="hfact" style="margin:-4px 0 8px;padding-left:0">👁 Ver facturación del mes</button>
     <div class="grid g3" id="hfactbox" hidden style="margin-bottom:16px">
       <div class="card stat"><div class="n">${pesos(tot)}</div><div class="l">Facturado este mes · ${vm.length} visitas</div></div>
