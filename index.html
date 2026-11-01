@@ -216,7 +216,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31z3";
+const APP_VERSION = "2026-10-31z4";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -711,10 +711,11 @@ async function vPaciente(v, id, tab){
 async function tabVisitas(c, p){
   const { data } = await sb.from("v_visitas").select("*").eq("paciente_id", p.id).order("fecha",{ascending:false}).order("creado",{ascending:false});
   const total = data.reduce((a,x)=>a+Number(x.total||0),0);
-  c.innerHTML = `<div class="row" style="margin-bottom:10px"><span class="muted">Total facturado: <b style="color:var(--ink)">${pesos(total)}</b></span><button class="btn right" id="bentp">Entrega de producto</button><button class="btn pri" id="bnv">+ Nueva visita</button></div>
-    <div class="card tight">${data.length?`<ul class="list">${data.map(x=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left;cursor:pointer" data-v="${x.id}"><div class="main"><div class="t">${fecha(x.fecha)} ${areaPill(x.area)}</div><div class="s">${esc(x.detalle_items||x.motivo||"")}${x.observaciones?" · "+esc(x.observaciones):""}</div>${x.insumos_detalle?`<div class="s" style="white-space:normal">Activos / insumos: ${esc(x.insumos_detalle)}</div>`:""}</div><div class="r">${pesos(x.total)}</div></button></li>`).join("")}</ul>`:`<div class="empty">Sin visitas.</div>`}</div>`;
+  c.innerHTML = `<div class="row" style="margin-bottom:10px"><button class="btn ghost" id="bverimp" style="padding-left:0">👁 Ver importes</button><span class="muted imp" hidden>Total facturado: <b style="color:var(--ink)">${pesos(total)}</b></span><button class="btn right" id="bentp">Entrega de producto</button><button class="btn pri" id="bnv">+ Nueva visita</button></div>
+    <div class="card tight">${data.length?`<ul class="list">${data.map(x=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left;cursor:pointer" data-v="${x.id}"><div class="main"><div class="t">${fecha(x.fecha)} ${areaPill(x.area)}</div><div class="s">${esc(x.detalle_items||x.motivo||"")}${x.observaciones?" · "+esc(x.observaciones):""}</div>${x.insumos_detalle?`<div class="s" style="white-space:normal">Activos / insumos: ${esc(x.insumos_detalle)}</div>`:""}</div><div class="r imp" hidden>${pesos(x.total)}</div></button></li>`).join("")}</ul>`:`<div class="empty">Sin visitas.</div>`}</div>`;
   $("#bnv").onclick = () => modalVisita(p);
   $("#bentp").onclick = () => modalEntrega(p);
+  $("#bverimp").onclick = () => { const ver = c.querySelector(".imp").hidden; c.querySelectorAll(".imp").forEach(e=>e.hidden=!ver); $("#bverimp").textContent = ver ? "Ocultar importes" : "👁 Ver importes"; };
   c.querySelectorAll("[data-v]").forEach(b => b.onclick = () => modalVisita(p, data.find(x=>x.id===b.dataset.v)));
 }
 async function modalVisita(p, visita=null, preset={}){
