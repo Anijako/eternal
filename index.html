@@ -216,7 +216,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31z2";
+const APP_VERSION = "2026-10-31z3";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -412,9 +412,10 @@ async function vAgenda(v, semana){
   const slots = []; for(let m = Math.floor(ini/dur)*dur; m < fin; m += dur) slots.push(m);
   const titulo = `${dDe(lun).getDate()}/${String(dDe(lun).getMonth()+1).padStart(2,"0")} al ${dDe(dom).getDate()}/${String(dDe(dom).getMonth()+1).padStart(2,"0")}`;
   const activos = ts.filter(t=>t.estado!=="Cancelado");
-  v.innerHTML = `<div class="row"><h1>Agenda</h1><span class="right"></span><button class="btn pri" id="bnt2">+ Nuevo turno</button></div>
+  v.innerHTML = `<div class="row"><h1>Agenda</h1><span class="right"></span><button class="btn" id="brec">Recordatorios de mañana</button><button class="btn pri" id="bnt2">+ Nuevo turno</button></div>
     <div class="row" style="margin:6px 0 14px"><a class="btn" href="#/agenda/${masDias(lun,-7)}">‹</a><b style="font-size:18px">Semana del ${titulo}</b><a class="btn" href="#/agenda/${masDias(lun,7)}">›</a>${lun!==lunesDe(hoy())?`<a class="btn ghost" href="#/agenda">Hoy</a>`:""}<span class="right muted">${activos.length} turnos</span></div>
     <div id="agw"></div>`;
+  $("#brec").onclick = () => modalRecordatorios();
   $("#bnt2").onclick = () => modalTurno({ fecha: lun <= hoy() && hoy() <= dom ? hoy() : lun });
   const ancho = window.innerWidth > 820;
   if(ancho){
@@ -506,14 +507,45 @@ async function modalTurno(t){
   }
 }
 
+/* Recordatorios: lista de turnos de un día con su WhatsApp listo para enviar de a uno */
+async function modalRecordatorios(fechaSel){
+  const f = fechaSel || masDias(hoy(), 1);
+  const plantilla = await leerConfig("mensaje_recordatorio", "Hola {nombre}! Te recuerdo tu turno {modalidad} {cuando} a las {hora} hs con la Dra. Analía Jakowluk. Por favor respondé SÍ para confirmar. ¡Gracias!");
+  const { data: ts } = await sb.from("v_turnos").select("*").eq("fecha", f).neq("estado","Cancelado").order("hora");
+  const d = dDe(f);
+  const cuando = f===masDias(hoy(),1) ? "de mañana" : f===hoy() ? "de hoy" : `del ${DIAS[d.getDay()].toLowerCase()} ${d.getDate()}/${String(d.getMonth()+1).padStart(2,"0")}`;
+  const texto = t => plantilla.replaceAll("{nombre}", (t.paciente||"").split(" ").slice(1).join(" ") || t.paciente || "").replaceAll("{paciente}", t.paciente||"")
+    .replaceAll("{cuando}", cuando).replaceAll("{dia}", DIAS[d.getDay()].toLowerCase()).replaceAll("{fecha}", `${d.getDate()}/${String(d.getMonth()+1).padStart(2,"0")}`)
+    .replaceAll("{hora}", t.hora.slice(0,5)).replaceAll("{motivo}", t.motivo||"").replaceAll("{modalidad}", (t.modalidad||"Presencial").toLowerCase())
+    .replaceAll("{enlace}", t.modalidad==="Virtual" && t.enlace ? ` Ingresá desde este enlace: ${t.enlace}.` : "").replaceAll("{calendario}", linkTurno(t));
+  const L = ts || []; const pend = L.filter(t=>!t.recordatorio_enviado).length;
+  abrirModal("Recordatorios por WhatsApp", `<div class="grid">
+    <div class="row"><label class="f" style="flex-direction:row;align-items:center;gap:10px">Turnos del <input type="date" id="rfecha" value="${f}" style="width:auto"></label><span class="right muted">${L.length} turnos · ${pend} sin recordar</span></div>
+    <p class="muted" style="margin:0;font-size:14px">Tocá “Enviar” en cada paciente: se abre WhatsApp con el mensaje listo, enviás y volvés acá para el siguiente. Cuando respondan “SÍ”, tocá “Confirmó”.</p>
+    ${L.length ? `<div class="card tight"><ul class="list">${L.map(t=>{ const tel = telWhatsApp(t.telefono);
+      return `<li><div class="item" style="flex-wrap:wrap"><div class="main" style="min-width:180px"><div class="t">${t.hora.slice(0,5)} · ${t.modalidad==="Virtual"?"💻 ":""}${esc(t.paciente)}</div><div class="s">${esc(t.motivo||"")}${t.recordatorio_enviado?' · <b style="color:var(--ok)">recordatorio enviado ✓</b>':""}</div></div>
+        <span class="pill ${estadoTurnoClase(t.estado)}">${t.estado}</span>
+        ${tel ? `<a class="btn ${t.recordatorio_enviado?"":"pri"}" data-rw="${t.id}" href="https://wa.me/${tel}?text=${encodeURIComponent(texto(t))}" target="_blank" rel="noopener">${t.recordatorio_enviado?"Reenviar":"Enviar"}</a>` : `<span class="pill s-warn">sin celular</span><button class="btn" data-rt="${t.id}">Cargar celular</button>`}
+        ${t.estado!=="Confirmado"?`<button class="btn ghost" data-rc="${t.id}">Confirmó</button>`:""}</div></li>`; }).join("")}</ul></div>` : `<div class="card empty">No hay turnos ese día.</div>`}
+    <div class="row"><button class="btn ghost" id="rcfg">Editar el texto del recordatorio</button></div></div>`);
+  $("#rfecha").onchange = e => modalRecordatorios(e.target.value);
+  document.querySelectorAll("[data-rw]").forEach(a => a.addEventListener("click", () => {
+    sb.from("turnos").update({ recordatorio_enviado: new Date().toISOString() }).eq("id", a.dataset.rw).then(()=>{});
+    a.classList.remove("pri"); a.textContent = "Reenviar"; const s = a.closest(".item").querySelector(".s"); if(s && !s.innerHTML.includes("✓")) s.innerHTML += ' · <b style="color:var(--ok)">recordatorio enviado ✓</b>'; }));
+  document.querySelectorAll("[data-rc]").forEach(b => b.onclick = async () => { const { error } = await sb.from("turnos").update({ estado:"Confirmado" }).eq("id", b.dataset.rc); if(error) return fail(error); toast("Turno confirmado"); modalRecordatorios(f); render(); });
+  document.querySelectorAll("[data-rt]").forEach(b => b.onclick = () => { const t = L.find(x=>x.id===b.dataset.rt); modalTurno(t); });
+  $("#rcfg").onclick = () => { cerrarModal(); location.hash = "#/ajustes"; setTimeout(()=>document.querySelector('[data-c="a"]')?.click(), 500); };
+}
+
 /* Configuración de la agenda (en Catálogos) */
 async function pintaAgendaCfg(c){
-  const cfg = await configAgenda(); const msg = await leerConfig("mensaje_turno", ""); const token = await leerConfig("calendario_token", ""); const dir = await leerConfig("direccion_consultorio", "");
+  const cfg = await configAgenda(); const msg = await leerConfig("mensaje_turno", ""); const msgRec = await leerConfig("mensaje_recordatorio", ""); const token = await leerConfig("calendario_token", ""); const dir = await leerConfig("direccion_consultorio", "");
   const url = `${SUPABASE_URL}/functions/v1/agenda-ics?token=${token}`;
   c.innerHTML = `<form id="fcfg" class="grid">
     <div class="card"><h2>Horario de atención</h2><table>${[1,2,3,4,5,6,0].map(w=>{ const r=cfg.dias?.[String(w)]; return `<tr><td style="width:140px"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" data-w="${w}" ${r?"checked":""} style="width:auto;min-height:0"> ${DIAS[w]}</label></td><td><select data-wd="${w}" style="width:auto">${opcionesHora(r?r[0]:"09:00", 30)}</select></td><td>a</td><td><select data-wh="${w}" style="width:auto">${opcionesHora(r?r[1]:"19:00", 30)}</select></td></tr>`; }).join("")}</table>
       <label class="f" style="margin-top:10px;max-width:260px">Duración habitual de un turno<select id="cdur">${[15,20,30,40,45,60].map(m=>`<option value="${m}" ${Number(cfg.duracion)===m?"selected":""}>${m} minutos</option>`).join("")}</select></label></div>
     <div class="card"><h2>Mensaje de WhatsApp</h2><p class="muted" style="margin-top:0">Se puede usar {nombre}, {dia}, {fecha}, {hora}, {motivo}, {modalidad} (presencial / virtual), {enlace} (el link si es virtual) y {calendario} (link para que el paciente agregue el turno a su calendario, con aviso 1 hora antes); se reemplazan solos.</p><textarea id="cmsg" rows="4">${esc(msg)}</textarea>
+      <h3>Mensaje de recordatorio (el día anterior)</h3><p class="muted" style="margin-top:0">Además de los anteriores se puede usar {cuando} (“de mañana”, “de hoy” o la fecha).</p><textarea id="cmsgr" rows="3">${esc(msgRec)}</textarea>
       <label class="f" style="margin-top:10px">Dirección del consultorio (aparece en el calendario del paciente)<input id="cdir" value="${esc(dir)}" placeholder="ej. Av. Siempreviva 742, Banfield"></label></div>
     <div class="row"><button class="btn pri right">Guardar configuración</button></div></form>
     <div class="card" style="margin-top:14px"><h2>Ver los turnos en el calendario del iPad / iPhone</h2>
@@ -528,6 +560,7 @@ async function pintaAgendaCfg(c){
     const dias = {}; for(const ch of c.querySelectorAll("[data-w]")){ if(!ch.checked) continue; const w=ch.dataset.w, a=c.querySelector(`[data-wd="${w}"]`).value, b=c.querySelector(`[data-wh="${w}"]`).value; if(!a||!b||a>=b) return toast(`Revisá el horario del ${DIAS[w].toLowerCase()}.`); dias[w]=[a,b]; }
     const r1 = await sb.from("config").upsert({ clave:"agenda", valor:{ duracion:Number($("#cdur").value), dias } }); if(r1.error) return fail(r1.error);
     const r2 = await sb.from("config").upsert({ clave:"mensaje_turno", valor:$("#cmsg").value.trim() }); if(r2.error) return fail(r2.error);
+    const r4 = await sb.from("config").upsert({ clave:"mensaje_recordatorio", valor:$("#cmsgr").value.trim() }); if(r4.error) return fail(r4.error);
     const r3 = await sb.from("config").upsert({ clave:"direccion_consultorio", valor:$("#cdir").value.trim() || "Eternal Secret" }); if(r3.error) return fail(r3.error);
     toast("Configuración guardada"); };
 }
@@ -572,7 +605,7 @@ async function vInicio(v){
     <div class="search card" style="padding:0;border:none;background:none;margin-bottom:16px">${ICON.search}<input id="qhome" placeholder="Buscar paciente por apellido, nombre o DNI" autocomplete="off"></div>
     <div id="reshome"></div>
     <div class="row" style="margin-bottom:16px"><button class="btn pri" id="hent">Entrega de producto</button><button class="btn" id="hcomp">+ Cargar compra</button></div>
-    <div class="card tight" style="margin-bottom:16px"><div style="padding:14px 16px 4px" class="row"><h2 style="margin:0">Turnos de esta semana</h2><a class="btn ghost right" href="#/agenda">Ver agenda</a><button class="btn pri" id="hturno">+ Turno</button></div>
+    <div class="card tight" style="margin-bottom:16px"><div style="padding:14px 16px 4px" class="row"><h2 style="margin:0">Turnos de esta semana</h2><a class="btn ghost right" href="#/agenda">Ver agenda</a><button class="btn" id="hrec">Recordatorios</button><button class="btn pri" id="hturno">+ Turno</button></div>
       ${tsem.length?`<ul class="list">${tsem.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left" data-ht="${t.id}"><div class="main"><div class="t">${fechaLarga(t.fecha)} · ${t.hora.slice(0,5)} · ${t.modalidad==="Virtual"?"💻 ":""}${esc(t.paciente)}</div><div class="s">${esc(t.motivo||"")}${t.whatsapp_enviado?" · WhatsApp enviado ✓":""}</div></div><span class="pill ${estadoTurnoClase(t.estado)}">${t.estado}</span></button></li>`).join("")}</ul>`:`<div class="empty">No hay turnos de acá al domingo.</div>`}</div>
     <button class="btn ghost" id="hfact" style="margin:-4px 0 8px;padding-left:0">👁 Ver facturación del mes</button>
     <div class="grid g3" id="hfactbox" hidden style="margin-bottom:16px">
@@ -589,6 +622,7 @@ async function vInicio(v){
   buscadorPacientes($("#qhome"), $("#reshome"));
   $("#hent").onclick = () => modalEntrega(null);
   $("#hturno").onclick = () => modalTurno({ fecha: hoy() });
+  $("#hrec").onclick = () => modalRecordatorios();
   $("#hfact").onclick = () => { const b=$("#hfactbox"); b.hidden = !b.hidden; $("#hfact").textContent = b.hidden ? "👁 Ver facturación del mes" : "Ocultar facturación"; };
   v.querySelectorAll("[data-ht]").forEach(b=>b.onclick=()=>modalTurno(tsem.find(t=>t.id===b.dataset.ht)));
   $("#hcomp").onclick = () => modalCompra();
