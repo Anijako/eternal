@@ -216,7 +216,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31z";
+const APP_VERSION = "2026-10-31z2";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -582,7 +582,7 @@ async function vInicio(v){
     </div>
     <div class="grid g2">
       <div class="card tight"><div style="padding:14px 16px 4px" class="row"><h2 style="margin:0">Últimas visitas</h2></div>
-        <ul class="list">${rec.map(r=>`<li><a class="item" href="#/p/${r.paciente_id}"><div class="main"><div class="t">${esc(r.paciente)}</div><div class="s">${fechaCorta(r.fecha)} · ${esc(r.detalle_items||r.motivo||"")}</div></div><div class="r">${areaPill(r.area)}<div class="muted">${pesos(r.total)}</div></div></a></li>`).join("")}</ul></div>
+        <ul class="list">${rec.map(r=>`<li><a class="item" href="#/p/${r.paciente_id}"><div class="main"><div class="t">${esc(r.paciente)}</div><div class="s">${fechaCorta(r.fecha)} · ${esc(r.detalle_items||r.motivo||"")}</div></div><div class="r">${areaPill(r.area)}</div></a></li>`).join("")}</ul></div>
       <div class="card tight"><div style="padding:14px 16px 4px" class="row"><h2 style="margin:0">Stock que requiere atención</h2><a class="btn ghost right" href="#/stock">Ver todo</a></div>
         ${alertas.length?`<ul class="list">${alertas.map(p=>`<li><div class="item"><div class="main"><div class="t">${esc(p.nombre)}</div><div class="s">${esc(p.linea)} · <code>${p.codigo_txt}</code> · stock ${num(p.stock_actual)} · vto ${mmaa(p.proximo_vencimiento)}</div></div><span class="pill ${alertaClase(p.alerta)}">${esc(p.alerta)}</span></div></li>`).join("")}</ul>`:`<div class="empty">Nada pendiente. Cargá los productos en Stock para empezar a ver alertas.</div>`}</div>
     </div>`;
