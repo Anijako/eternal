@@ -216,7 +216,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-11-01d";
+const APP_VERSION = "2026-11-01e";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -744,6 +744,8 @@ async function modalVisita(p, visita=null, preset={}){
   const activos = prods.filter(x=>x.activo);
   let todos = [];
   if(visita){ const { data } = await sb.from("visita_items").select("*, productos(nombre)").eq("visita_id", visita.id); todos = data || []; }
+  let descontar = !visita || visita.origen !== "Facturación histórica";
+  if(visita){ const { data: vv } = await sb.from("visitas").select("descontar_stock").eq("id", visita.id).single(); if(vv) descontar = vv.descontar_stock; }
   const tratItems = todos.filter(i=>i.tipo==="Tratamiento");
   const vendidos = todos.filter(i=>i.tipo==="Producto" || i.tipo==="Medicamento");
   const faltantes = todos.filter(i=>i.tipo==="Insumo" && !i.producto_id);
@@ -763,6 +765,8 @@ async function modalVisita(p, visita=null, preset={}){
 </div>
       <div><h3>2 · Productos vendidos aparte <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">(opcional, con importe)</span></h3><div id="vds"></div><button type="button" class="btn ghost" id="badv">+ Producto vendido</button></div>
       <label class="f">Observaciones<textarea name="observaciones">${esc(visita?.observaciones)}</textarea></label>
+      <label class="card" style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;cursor:pointer;${descontar?"":"background:var(--warn-soft);border-color:transparent"}" id="vdesclbl"><input type="checkbox" id="vdesc" ${descontar?"checked":""} style="width:22px;height:22px;min-height:0;flex:none;margin-top:2px">
+        <span><b>Descontar los ítems y productos del stock</b><br><span class="muted" style="font-size:13px">Destildalo si estás cargando una visita vieja o ítems que ya se descontaron antes: quedan registrados en el historial pero el stock no se toca.</span></span></label>
       <div class="row"><b>Total: <span id="vtot">$ 0</span></b><span class="right"></span>${visita?`<button type="button" class="btn danger" id="bdelv">Eliminar visita</button>`:""}<button class="btn pri" type="submit">Guardar visita</button></div>
     </form>`);
   const trs = $("#trs"), vds = $("#vds");
@@ -810,11 +814,13 @@ async function modalVisita(p, visita=null, preset={}){
   vendidos.filter(i=>i.producto_id).forEach(agregarVend);
   if(!visita) agregarTrat({});
   $("#badt").onclick = () => agregarTrat({});
+  $("#vdesc").onchange = e => { $("#vdesclbl").style.background = e.target.checked ? "" : "var(--warn-soft)"; $("#vdesclbl").style.borderColor = e.target.checked ? "" : "transparent"; };
   $("#badv").onclick = () => agregarVend({});
   total();
   if(visita) $("#bdelv").onclick = async () => { if(!(await confirmar("¿Eliminar esta visita y sus ítems? Los productos vuelven al stock."))) return; const { error } = await sb.from("visitas").delete().eq("id",visita.id); if(error) return fail(error); cerrarModal(); toast("Visita eliminada"); cache.productos=null; render(); };
   $("#fv").onsubmit = async e => { e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target)); for(const k in d) if(d[k]==="") d[k]=null;
+    d.descontar_stock = $("#vdesc").checked;
     const filas = [];
     for(const card of trs.querySelectorAll(".tcard")){
       const ref = $(".t-ref",card).value || null, desc = $(".t-desc",card).value.trim() || null, monto = Number($(".t-monto",card).value||0);
