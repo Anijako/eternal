@@ -216,7 +216,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-11-01a";
+const APP_VERSION = "2026-11-01b";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -535,6 +535,26 @@ async function modalRecordatorios(fechaSel){
   document.querySelectorAll("[data-rc]").forEach(b => b.onclick = async () => { const { error } = await sb.from("turnos").update({ estado:"Confirmado" }).eq("id", b.dataset.rc); if(error) return fail(error); toast("Turno confirmado"); modalRecordatorios(f); render(); });
   document.querySelectorAll("[data-rt]").forEach(b => b.onclick = () => { const t = L.find(x=>x.id===b.dataset.rt); modalTurno(t); });
   $("#rcfg").onclick = () => { cerrarModal(); location.hash = "#/ajustes"; setTimeout(()=>document.querySelector('[data-c="a"]')?.click(), 500); };
+}
+
+/* Categorías de productos (en Catálogos) */
+async function pintaCategorias(c){
+  const L = await categorias(); const prods = await catalogo("productos", true);
+  const cuenta = n => prods.filter(p=>p.categoria===n).length;
+  c.innerHTML = `<div class="card"><h2>Categorías de productos</h2><p class="muted" style="margin-top:0">Se usan para ordenar el stock y las listas de productos. La categoría de cada producto se elige al registrarlo o editarlo (Stock → producto → Ver).</p>
+    <div class="row" style="flex-wrap:nowrap;margin-bottom:12px"><input id="kn" placeholder="Nueva categoría (ej. Geles)"><button class="btn pri" id="kadd">Agregar</button></div>
+    <ul class="list">${L.map(n=>`<li><div class="item" style="padding-left:0;padding-right:0"><div class="main"><div class="t">${esc(n)}</div><div class="s">${cuenta(n)} productos</div></div><button class="btn ghost" data-kr="${esc(n)}">Renombrar</button><button class="btn ghost danger" data-kd="${esc(n)}">Eliminar</button></div></li>`).join("")}</ul></div>`;
+  const guardar = async N => { const { error } = await sb.from("config").upsert({ clave:"categorias_productos", valor:[...new Set(N)].sort((a,b)=>a.localeCompare(b,"es")) }); if(error) throw error; };
+  $("#kadd").onclick = async () => { const n = $("#kn").value.trim(); if(!n) return toast("Escribí el nombre."); if(L.some(x=>x.toLowerCase()===n.toLowerCase())) return toast("Esa categoría ya existe.");
+    try{ await guardar([...L, n]); }catch(e){ return fail(e); } toast("Categoría agregada"); pintaCategorias(c); };
+  $("#kn").onkeydown = e => { if(e.key==="Enter"){ e.preventDefault(); $("#kadd").click(); } };
+  c.querySelectorAll("[data-kr]").forEach(b=>b.onclick=async()=>{ const viejo=b.dataset.kr; const nuevo=(prompt(`Nuevo nombre para “${viejo}”:`, viejo)||"").trim(); if(!nuevo || nuevo===viejo) return;
+    try{ await guardar(L.map(x=>x===viejo?nuevo:x)); const { error } = await sb.from("productos").update({ categoria:nuevo }).eq("categoria", viejo); if(error) throw error; }catch(e){ return fail(e); }
+    cache.productos=null; toast("Categoría renombrada (también en sus productos)"); pintaCategorias(c); });
+  c.querySelectorAll("[data-kd]").forEach(b=>b.onclick=async()=>{ const n=b.dataset.kd, k=cuenta(n);
+    if(!(await confirmar(k ? `“${n}” tiene ${k} productos: quedarán sin categoría. ¿Eliminarla?` : `¿Eliminar la categoría “${n}”?`))) return;
+    try{ await guardar(L.filter(x=>x!==n)); if(k){ const { error } = await sb.from("productos").update({ categoria:null }).eq("categoria", n); if(error) throw error; } }catch(e){ return fail(e); }
+    cache.productos=null; toast("Categoría eliminada"); pintaCategorias(c); });
 }
 
 /* Configuración de la agenda (en Catálogos) */
@@ -1429,13 +1449,13 @@ async function vFacturacion(v){
 async function vAjustes(v){
   const [trats, dets] = await Promise.all([catalogo("tratamientos",true), catalogo("determinaciones",true)]);
   v.innerHTML = `<h1>Catálogos</h1><p class="sub">Tratamientos con su precio y rangos de laboratorio. Lo que cargues acá se usa en las visitas y en el estado de cada análisis.</p>
-    <div class="tabs"><button class="tab on" data-c="t">Tratamientos</button><button class="tab" data-c="d">Rangos de laboratorio</button><button class="tab" data-c="a">Agenda</button><button class="tab" data-c="b">Copias de seguridad</button></div><div id="cc"></div>`;
+    <div class="tabs"><button class="tab on" data-c="t">Tratamientos</button><button class="tab" data-c="k">Categorías de productos</button><button class="tab" data-c="d">Rangos de laboratorio</button><button class="tab" data-c="a">Agenda</button><button class="tab" data-c="b">Copias de seguridad</button></div><div id="cc"></div>`;
   const pintaT = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:10px"><button class="btn pri right" id="bnt">+ Tratamiento</button></div><div class="card tight">${trats.length?`<ul class="list">${trats.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left;cursor:pointer" data-t="${t.id}"><div class="main"><div class="t">${esc(t.nombre)}${t.activo?"":" <span class='pill s-none'>inactivo</span>"}</div><div class="s">${esc(t.categoria||"")}</div></div>${areaPill(t.area)}<div class="r">${pesos(t.precio)}</div></button></li>`).join("")}</ul>`:`<div class="empty">Cargá los tratamientos que hace (facial, PRP, sueroterapia…) con su precio. Así al cargar una visita se completan solos.</div>`}</div>`;
     $("#bnt").onclick=()=>modalTrat({}); $("#cc").querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>modalTrat(trats.find(x=>x.id===b.dataset.t))); };
   const pintaD = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:8px"><span class="right"></span><button class="btn" id="bplan">Imprimir planilla para completar a mano</button></div><p class="muted">Tocá una determinación para cargar el rango de referencia y el óptimo funcional. Si es distinto para hombres, completá también esos campos.</p><div class="card tight"><div class="tablewrap"><table><thead><tr><th>Determinación</th><th>Unidad</th><th>Referencia</th><th>Óptimo</th><th>Hombres</th><th></th></tr></thead><tbody>${dets.map(d=>`<tr><td><b>${esc(d.nombre)}</b><div class="muted" style="font-size:12.5px">${esc(d.grupo)}</div></td><td>${esc(d.unidad||"")}</td>${d.rango_por?`<td colspan="2"><span class="pill s-info">${d.rango_por==="fase"?"Según fase del ciclo":"Según edad"}</span></td>`:`<td>${d.ref_min!=null||d.ref_max!=null?rtxt(d.ref_min,d.ref_max):'<span class="muted">—</span>'}</td><td>${d.opt_min!=null||d.opt_max!=null?rtxt(d.opt_min,d.opt_max):'<span class="muted">—</span>'}</td>`}<td class="muted">${[d.ref_min_h,d.ref_max_h,d.opt_min_h,d.opt_max_h].some(x=>x!=null)?"sí":""}</td><td><button class="btn ghost" data-d="${d.id}">Editar</button></td></tr>`).join("")}</tbody></table></div></div>`;
     $("#cc").querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>modalDet(dets.find(x=>x.id===b.dataset.d)));
     $("#bplan").onclick = () => imprimirPlanilla(dets); };
-  document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{ document.querySelectorAll("[data-c]").forEach(x=>x.classList.toggle("on",x===b)); b.dataset.c==="t"?pintaT():b.dataset.c==="d"?pintaD():b.dataset.c==="a"?pintaAgendaCfg($("#cc")):pintaCopias($("#cc")); });
+  document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{ document.querySelectorAll("[data-c]").forEach(x=>x.classList.toggle("on",x===b)); b.dataset.c==="t"?pintaT():b.dataset.c==="k"?pintaCategorias($("#cc")):b.dataset.c==="d"?pintaD():b.dataset.c==="a"?pintaAgendaCfg($("#cc")):pintaCopias($("#cc")); });
   pintaT();
 }
 async function modalTrat(t){
