@@ -216,7 +216,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-11-01b";
+const APP_VERSION = "2026-11-01c";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -717,7 +717,7 @@ async function vPaciente(v, id, tab){
         <p><b>Alergias / medicación</b><br>${p.alergias_medicacion?esc(p.alergias_medicacion):'<span class="muted">Sin cargar</span>'}</p>
         ${p.observaciones?`<p><b>Observaciones</b><br>${esc(p.observaciones)}</p>`:""}</div>
     </div>
-    <div class="tabs">${[["visitas","Visitas"],["labs","Laboratorios"],["evo","Evolución"]].map(([k,t])=>`<button class="tab ${tab===k?"on":""}" data-t="${k}">${t}</button>`).join("")}</div>
+    <div class="tabs">${[["visitas","Visitas"],["labs","Laboratorios"],["evo","Evolución"],["trat","Historial de tratamientos"]].map(([k,t])=>`<button class="tab ${tab===k?"on":""}" data-t="${k}">${t}</button>`).join("")}</div>
     <div id="tabc"></div>`;
   $("#bedit").onclick = () => modalPaciente(p);
   $("#bunif").onclick = () => modalUnificar(p);
@@ -727,6 +727,7 @@ async function vPaciente(v, id, tab){
   if(tab==="visitas") await tabVisitas(c, p);
   if(tab==="labs") await tabLabs(c, p);
   if(tab==="evo") await tabEvolucion(c, p);
+  if(tab==="trat") await tabTratamientos(c, p);
 }
 async function tabVisitas(c, p){
   const { data } = await sb.from("v_visitas").select("*").eq("paciente_id", p.id).order("fecha",{ascending:false}).order("creado",{ascending:false});
@@ -936,6 +937,38 @@ function imprimirEvolucion(p, porDet){
       <div class="inf-ev-r">Ref. ${rangoTxt(u.rmin,u.rmax)} · Óptimo ${rangoTxt(u.omin,u.omax)}</div>${grafico(rs)}
       <table class="inf-ev-t">${rs.map(r=>`<tr><td>${fecha(r.fecha)}</td><td class="num"><b>${valorTxt(r)}</b></td><td>${punto(r.estado)} ${semaforoTxt(r.estado)}</td></tr>`).join("")}</table></div>`; }).join("")}</div>` + leyendaInforme();
   imprimirHTML(html, "print-doc", "@page{size:A4;margin:12mm 13mm}", `Evolución laboratorio ${p.nombre}`);
+}
+
+/* ---------- HISTORIAL DE TRATAMIENTOS ---------- */
+async function datosTratamientos(p){
+  const { data, error } = await sb.from("visita_items").select("id,visita_id,tipo,tratamiento_id,producto_id,cantidad,monto,descripcion,observacion,item_padre,tratamientos(nombre,area),productos(nombre,categoria),visitas!inner(paciente_id,fecha,area,observaciones)").eq("visitas.paciente_id", p.id);
+  if(error) throw error;
+  const hijos = {}; (data||[]).filter(i=>i.tipo==="Insumo").forEach(i => (hijos[i.item_padre] ??= []).push(i));
+  return (data||[]).filter(i => i.tipo==="Tratamiento" || ((i.tipo==="Producto"||i.tipo==="Medicamento") && !i.producto_id && (i.descripcion||i.monto)))
+    .map(i => ({ id:i.id, fecha:i.visitas.fecha, area:i.tratamientos?.area || i.visitas.area, nombre:i.tratamientos?.nombre || i.descripcion || "Tratamiento", detalle: i.tratamientos?.nombre && i.descripcion ? i.descripcion : "",
+      monto:Number(i.monto||0), obs:i.visitas.observaciones, items:(hijos[i.id]||[]).map(h => h.producto_id ? `${h.productos?.nombre} ×${num(h.cantidad)}` : (h.observacion||"")) }))
+    .sort((a,b)=> a.fecha<b.fecha?1:a.fecha>b.fecha?-1:0);
+}
+async function tabTratamientos(c, p){
+  const L = await datosTratamientos(p);
+  const nombres = [...new Set(L.map(x=>x.nombre))].sort((a,b)=>a.localeCompare(b,"es"));
+  c.innerHTML = `<div class="row" style="margin-bottom:10px"><select id="tfil" style="width:auto"><option value="">Todos los tratamientos (${L.length})</option>${nombres.map(n=>`<option>${esc(n)}</option>`).join("")}</select>
+      <button class="btn ghost" id="tverimp">👁 Ver importes</button><button class="btn pri right" id="tprint">Reporte (PDF)</button></div><div id="tlist"></div>`;
+  let ver = false;
+  const filtrados = () => { const f = $("#tfil").value; return L.filter(x=>!f || x.nombre===f); };
+  const pintar = () => { const F = filtrados();
+    $("#tlist").innerHTML = F.length ? `<div class="card tight"><div class="tablewrap"><table><thead><tr><th style="width:110px">Fecha</th><th>Tratamiento</th><th>Ítems utilizados</th>${ver?'<th class="num">Importe</th>':""}</tr></thead><tbody>${F.map(x=>`<tr><td>${fecha(x.fecha)}</td><td><b>${esc(x.nombre)}</b>${x.detalle?`<div class="muted" style="font-size:13px">${esc(x.detalle)}</div>`:""}</td><td style="font-size:14px">${x.items.length?x.items.map(esc).join("<br>"):'<span class="muted">—</span>'}</td>${ver?`<td class="num">${pesos(x.monto)}</td>`:""}</tr>`).join("")}</tbody>${ver?`<tfoot><tr><td colspan="3"><b>Total</b></td><td class="num"><b>${pesos(F.reduce((a,x)=>a+x.monto,0))}</b></td></tr></tfoot>`:""}</table></div></div>`
+      : `<div class="card empty">${L.length?"No hay registros de ese tratamiento.":"Todavía no hay tratamientos cargados con el formato nuevo de visitas. Las visitas de la facturación vieja figuran en la pestaña Visitas."}</div>`; };
+  $("#tfil").onchange = pintar;
+  $("#tverimp").onclick = () => { ver = !ver; $("#tverimp").textContent = ver ? "Ocultar importes" : "👁 Ver importes"; pintar(); };
+  $("#tprint").onclick = async () => { const F = filtrados(); if(!F.length) return toast("No hay tratamientos para el reporte.");
+    const imp = await confirmar2("¿El reporte va con importes?", "Con importes", "Sin importes");
+    const f = $("#tfil").value;
+    const html = cabeceraInforme(p, "Historial de tratamientos", (f ? f + " · " : "") + `${F.length} registro${F.length>1?"s":""} · emitido el ${fecha(hoy())}`) +
+      `<table class="inf-tab hc-vis"><thead><tr><th style="width:14%">Fecha</th><th style="width:28%">Tratamiento</th><th>Ítems utilizados</th>${imp?'<th class="num" style="width:14%">Importe</th>':""}</tr></thead><tbody>${[...F].reverse().map(x=>`<tr><td>${fecha(x.fecha)}</td><td><b>${esc(x.nombre)}</b>${x.detalle?`<div class="inf-mut">${esc(x.detalle)}</div>`:""}</td><td>${x.items.length?x.items.map(esc).join("<br>"):"—"}</td>${imp?`<td class="num">${pesos(x.monto)}</td>`:""}</tr>`).join("")}</tbody>${imp?`<tfoot><tr><td colspan="3"><b>Total</b></td><td class="num"><b>${pesos(F.reduce((a,x)=>a+x.monto,0))}</b></td></tr></tfoot>`:""}</table>
+      <footer class="inf-ley"><div class="inf-firma">${DRA}</div></footer>`;
+    imprimirHTML(html, "print-doc", "@page{size:A4;margin:12mm 13mm}", `Tratamientos ${p.nombre}${f?" - "+f:""}`); };
+  pintar();
 }
 
 /* ---------- UNIFICAR PACIENTES ---------- */
