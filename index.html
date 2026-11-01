@@ -216,7 +216,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-11-01j";
+const APP_VERSION = "2026-11-01k";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -764,7 +764,7 @@ async function modalVisita(p, visita=null, preset={}){
         <label class="f wide">Motivo / resumen<input name="motivo" value="${esc(visita?.motivo||preset.motivo)}"></label>
       </div>
       ${visita?.total_historico?`<p class="muted" style="margin:0">Registro de la facturación anterior: ${esc(visita.motivo||"")} · ${pesos(visita.total_historico)}</p>`:""}
-      <div><h3>1 · Tratamientos</h3><p class="muted" style="margin:-4px 0 8px;font-size:13px">Cargá cada tratamiento con su importe. Dentro de cada uno, los ítems usados (activos, butterfly, suero, cremas…) se descuentan del stock y quedan en el historial.</p>
+      <div><h3>1 · Tratamientos</h3><p class="muted" style="margin:-4px 0 8px;font-size:13px">Cargá cada tratamiento con su importe. Dentro de cada uno, los ítems usados (activos, butterfly, suero, cremas…) se descuentan del stock y quedan en el historial; si alguno se cobra aparte, poné su importe de venta. El total de la visita suma todo.</p>
         <div id="trs"></div><button type="button" class="btn" id="badt">+ Tratamiento</button>
 </div>
       <div><h3>2 · Productos vendidos aparte <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">(opcional, con importe)</span></h3><div id="vds"></div><button type="button" class="btn ghost" id="badv">+ Producto vendido</button></div>
@@ -774,13 +774,15 @@ async function modalVisita(p, visita=null, preset={}){
       <div class="row"><b>Total: <span id="vtot">$ 0</span></b><span class="right"></span>${visita?`<button type="button" class="btn danger" id="bdelv">Eliminar visita</button>`:""}<button class="btn pri" type="submit">Guardar visita</button></div>
     </form>`);
   const trs = $("#trs"), vds = $("#vds");
-  function total(){ let s = Number(visita?.total_historico||0); document.querySelectorAll("#fv .t-monto, #fv .v-monto").forEach(m=>s+=Number(m.value||0)); $("#vtot").textContent = pesos(s); }
+  function total(){ let s = Number(visita?.total_historico||0); document.querySelectorAll("#fv .t-monto, #fv .v-monto, #fv .i-monto").forEach(m=>s+=Number(m.value||0)); $("#vtot").textContent = pesos(s); }
   const pintarItems = card => { const box = $(".t-items", card), L = card._items;
-    box.innerHTML = (L.length ? L.map((x,i)=>`<div class="row" style="flex-wrap:nowrap;margin-bottom:4px"><select data-ip="${i}" style="min-height:40px;padding:6px 8px">${opcionesProductos(activos, x.producto_id)}</select><input data-ic="${i}" type="number" min="1" step="1" inputmode="numeric" value="${x.cantidad}" style="width:72px;min-height:40px" aria-label="Cantidad"><button type="button" class="iconbtn" data-ix="${i}" title="Quitar ítem">×</button></div>`).join("") : `<div class="muted" style="font-size:13px;margin-bottom:4px">Sin ítems.</div>`)
+    box.innerHTML = (L.length ? `<div class="row muted" style="flex-wrap:nowrap;font-size:12px;margin-bottom:2px"><span style="flex:1">Producto</span><span style="width:72px">Cant.</span><span style="width:110px">Importe venta $</span><span style="width:40px"></span></div>` + L.map((x,i)=>{ const pr = activos.find(a=>a.id===x.producto_id)?.precio;
+        return `<div class="row" style="flex-wrap:nowrap;margin-bottom:4px"><select data-ip="${i}" style="min-height:40px;padding:6px 8px;flex:1">${opcionesProductos(activos, x.producto_id)}</select><input data-ic="${i}" type="number" min="1" step="1" inputmode="numeric" value="${x.cantidad}" style="width:72px;min-height:40px" aria-label="Cantidad"><input class="i-monto" data-im="${i}" type="number" min="0" step="any" inputmode="decimal" value="${x.monto||""}" placeholder="${pr!=null?"precio "+pr:"opcional"}" style="width:110px;min-height:40px" aria-label="Importe de venta"><button type="button" class="iconbtn" data-ix="${i}" title="Quitar ítem">×</button></div>`; }).join("") : `<div class="muted" style="font-size:13px;margin-bottom:4px">Sin ítems.</div>`)
       + `<button type="button" class="btn ghost" data-iadd style="min-height:36px;padding:4px 8px">+ Ítem</button>`;
-    box.querySelectorAll("[data-ip]").forEach(e=>e.onchange=()=>{ L[+e.dataset.ip].producto_id = e.value; });
+    box.querySelectorAll("[data-ip]").forEach(e=>e.onchange=()=>{ L[+e.dataset.ip].producto_id = e.value; const pr = activos.find(a=>a.id===e.value)?.precio; const m = box.querySelector(`[data-im="${e.dataset.ip}"]`); if(m) m.placeholder = pr!=null ? "precio "+pr : "opcional"; });
     box.querySelectorAll("[data-ic]").forEach(e=>e.oninput=()=>{ L[+e.dataset.ic].cantidad = Math.max(1, parseInt(e.value)||1); });
-    box.querySelectorAll("[data-ix]").forEach(e=>e.onclick=()=>{ L.splice(+e.dataset.ix,1); pintarItems(card); });
+    box.querySelectorAll("[data-im]").forEach(e=>e.oninput=()=>{ L[+e.dataset.im].monto = e.value; total(); });
+    box.querySelectorAll("[data-ix]").forEach(e=>e.onclick=()=>{ L.splice(+e.dataset.ix,1); pintarItems(card); total(); });
     $("[data-iadd]",box).onclick = () => { L.push({ producto_id:"", cantidad:1 }); pintarItems(card); }; };
   const agregarTrat = (it={}) => {
     trs.insertAdjacentHTML("beforeend", `<div class="card tcard" style="padding:12px;margin-bottom:10px">
@@ -788,15 +790,15 @@ async function modalVisita(p, visita=null, preset={}){
         <label class="f" style="width:130px">Importe $<input class="t-monto" type="number" min="0" step="any" inputmode="decimal" value="${it.monto??""}"></label>
         <button type="button" class="iconbtn t-x" title="Quitar tratamiento">×</button></div>
       <input class="t-desc" placeholder="Detalle / descripción (opcional)" value="${esc(it.descripcion)}" style="margin-top:8px">
-      <div style="background:var(--surface2);border-radius:10px;padding:8px 10px;margin-top:8px"><div style="font-size:13px;font-weight:600;margin-bottom:6px">Ítems del tratamiento <span class="muted" style="font-weight:400">· se descuentan del stock</span></div><div class="t-items"></div></div></div>`);
+      <div style="background:var(--surface2);border-radius:10px;padding:8px 10px;margin-top:8px"><div style="font-size:13px;font-weight:600;margin-bottom:6px">Ítems del tratamiento <span class="muted" style="font-weight:400">· se descuentan del stock · el importe es opcional (si el ítem se cobra aparte)</span></div><div class="t-items"></div></div></div>`);
     const card = trs.lastElementChild;
-    card._items = it.id ? todos.filter(i=>i.tipo==="Insumo" && i.item_padre===it.id && i.producto_id).map(i=>({ producto_id:i.producto_id, cantidad:Number(i.cantidad)||1 })) : (it._items || []);
+    card._items = it.id ? todos.filter(i=>i.tipo==="Insumo" && i.item_padre===it.id && i.producto_id).map(i=>({ producto_id:i.producto_id, cantidad:Number(i.cantidad)||1, monto:Number(i.monto)||"" })) : (it._items || []);
     pintarItems(card);
     const ref = $(".t-ref",card), monto = $(".t-monto",card);
     ref.onchange = async () => { const pr = ref.selectedOptions[0]?.dataset.precio; if(pr && !monto.value) monto.value = pr; total();
       if(!ref.value){ card._items = []; return pintarItems(card); }
       const { data } = await sb.from("tratamiento_insumos").select("producto_id,cantidad").eq("tratamiento_id", ref.value);
-      card._items = (data||[]).map(x=>({ producto_id:x.producto_id, cantidad:x.cantidad })); pintarItems(card); };
+      card._items = (data||[]).map(x=>({ producto_id:x.producto_id, cantidad:x.cantidad, monto:"" })); pintarItems(card); total(); };
     monto.oninput = total;
     $(".t-x",card).onclick = () => { card.remove(); total(); };
     total();
@@ -828,7 +830,7 @@ async function modalVisita(p, visita=null, preset={}){
     const filas = [];
     for(const card of trs.querySelectorAll(".tcard")){
       const ref = $(".t-ref",card).value || null, desc = $(".t-desc",card).value.trim() || null, monto = Number($(".t-monto",card).value||0);
-      const items = card._items.filter(x=>x.producto_id);
+      const items = card._items.filter(x=>x.producto_id).map(x=>({ producto_id:x.producto_id, cantidad:x.cantidad, monto:Number(x.monto||0) }));
       if(!ref && !desc && !monto && !items.length) continue;
       if(!ref && items.length) return toast("Elegí el tratamiento al que pertenecen los ítems.");
       filas.push({ tipo: ref ? "Tratamiento" : "Producto", tratamiento_id: ref, producto_id: null, descripcion: desc || (!ref ? "Tratamiento" : null), cantidad: 1, monto, insumos: ref ? items : null });
@@ -955,9 +957,9 @@ async function datosTratamientos(p){
   if(error) throw error;
   const hijos = {}; (data||[]).filter(i=>i.tipo==="Insumo").forEach(i => (hijos[i.item_padre] ??= []).push(i));
   return (data||[]).filter(i => i.tipo==="Tratamiento" || ((i.tipo==="Producto"||i.tipo==="Medicamento") && !i.producto_id && (i.descripcion||i.monto)))
-    .map(i => { const sum = {}; (hijos[i.id]||[]).filter(h=>h.producto_id).forEach(h => { const k = (h.productos?.nombre||"").trim(); sum[k] = (sum[k]||0) + Number(h.cantidad||0); });
+    .map(i => { const sum = {}; let mItems = 0; (hijos[i.id]||[]).filter(h=>h.producto_id).forEach(h => { const k = (h.productos?.nombre||"").trim(); sum[k] = (sum[k]||0) + Number(h.cantidad||0); mItems += Number(h.monto||0); });
       return { id:i.id, fecha:i.visitas.fecha, tratamiento_id:i.tratamiento_id || "", area:i.tratamientos?.area || i.visitas.area, nombre:(i.tratamientos?.nombre || i.descripcion || "Tratamiento").trim(), detalle: i.tratamientos?.nombre && i.descripcion ? i.descripcion : "",
-        monto:Number(i.monto||0), obs:i.visitas.observaciones, items:Object.entries(sum).map(([k,v])=>`${k} ×${num(v)}`) }; })
+        monto:Number(i.monto||0) + mItems, obs:i.visitas.observaciones, items:Object.entries(sum).map(([k,v])=>`${k} ×${num(v)}`) }; })
     .sort((a,b)=> a.fecha<b.fecha?1:a.fecha>b.fecha?-1:0);
 }
 async function tabTratamientos(c, p){
