@@ -1094,7 +1094,7 @@ const cod6 = n => String(n).padStart(6,"0");
 const mmaa = s => { if(!s) return "—"; const [y,m] = s.slice(0,10).split("-"); return `${m}/${y.slice(2)}`; };
 const mmaaAFecha = t => { const m = (t||"").trim().match(/^(\d{1,2})\s*[\/\-.]?\s*(\d{2})$/); if(!m) return null; const mo=+m[1], y=2000+ +m[2]; if(mo<1||mo>12) return null; const d=new Date(y,mo,0).getDate(); return `${y}-${String(mo).padStart(2,"0")}-${String(d).padStart(2,"0")}`; };
 const sumarMeses = (iso, n) => { const [y,m] = iso.split("-").map(Number); const t = m-1+n; return `${String(t%12+1).padStart(2,"0")}/${String(y+Math.floor(t/12)).slice(2)}`; };
-const CATS_DEF = ["Activos","Cremas","Limpieza","Vacunas","Serum","Tónicos","Contornos de Ojos","Protectores solares","Bálsamos labiales","Insumos","Suplementos","Capilar"];
+const CATS_DEF = ["Activos","Cremas","Geles","Limpieza","Vacunas","Serum","Tónicos","Contornos de Ojos","Protectores solares","Bálsamos labiales","Insumos","Suplementos","Capilar"];
 async function categorias(){ try{ const v = await leerConfig("categorias_productos", CATS_DEF); return Array.isArray(v) ? v : CATS_DEF; }catch(e){ return CATS_DEF; } }
 async function agregarCategoria(nombre){ const L = await categorias(); if(L.some(x=>x.toLowerCase()===nombre.toLowerCase())) return L; const N = [...L, nombre].sort((a,b)=>a.localeCompare(b,"es"));
   await sb.from("config").upsert({ clave:"categorias_productos", valor:N }); return N; }
