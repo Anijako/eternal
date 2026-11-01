@@ -216,7 +216,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-11-01g";
+const APP_VERSION = "2026-11-01h";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -1084,9 +1084,12 @@ async function tabLabs(c, p){
   const { data } = await sb.from("v_resultados").select("*").eq("paciente_id", p.id).order("fecha",{ascending:false}).order("orden");
   const fechas = [...new Set(data.map(r=>r.fecha))];
   c.innerHTML = `<div class="row" style="margin-bottom:10px"><span class="muted">${fechas.length} análisis cargados</span><button class="btn pri right" id="bnl">+ Cargar laboratorio</button></div>
-    ${fechas.length?fechas.map(f=>{ const rs=data.filter(r=>r.fecha===f); return `<div class="card tight" style="margin-bottom:12px"><div class="row" style="padding:12px 16px"><h2 style="margin:0">${fecha(f)}</h2><span class="muted">${rs.length} valores${rs.find(r=>r.fase)?" · "+esc(rs.find(r=>r.fase).fase):""}</span><button class="btn ghost right" data-pf="${f}">Imprimir</button><button class="btn ghost" data-f="${f}">Editar</button></div><div class="tablewrap"><table><thead><tr><th>Determinación</th><th class="num">Valor</th><th>Unidad</th><th>Rango</th><th>Estado</th></tr></thead><tbody>${rs.map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${valorTxt(r)}</b></td><td class="muted">${esc(r.unidad)}</td><td class="muted">${rango(r)}</td><td><span class="pill ${estadoClase(r.estado)}">${esc(r.estado)}</span></td></tr>`).join("")}</tbody></table></div></div>`; }).join(""):`<div class="card empty">Todavía no hay laboratorios cargados para ${esc(p.nombre)}.</div>`}`;
+    ${fechas.length?fechas.map(f=>{ const rs=data.filter(r=>r.fecha===f); return `<div class="card tight" style="margin-bottom:12px"><div class="row" style="padding:12px 16px"><h2 style="margin:0">${fecha(f)}</h2><span class="muted">${rs.length} valores${rs.find(r=>r.fase)?" · "+esc(rs.find(r=>r.fase).fase):""}</span><button class="btn ghost right" data-pf="${f}">Imprimir</button><button class="btn ghost" data-f="${f}">Editar</button><button class="btn ghost danger" data-lf="${f}">Eliminar</button></div><div class="tablewrap"><table><thead><tr><th>Determinación</th><th class="num">Valor</th><th>Unidad</th><th>Rango</th><th>Estado</th></tr></thead><tbody>${rs.map(r=>`<tr><td>${esc(r.determinacion)}</td><td class="num"><b>${valorTxt(r)}</b></td><td class="muted">${esc(r.unidad)}</td><td class="muted">${rango(r)}</td><td><span class="pill ${estadoClase(r.estado)}">${esc(r.estado)}</span></td></tr>`).join("")}</tbody></table></div></div>`; }).join(""):`<div class="card empty">Todavía no hay laboratorios cargados para ${esc(p.nombre)}.</div>`}`;
   $("#bnl").onclick = () => modalLab(p);
   c.querySelectorAll("[data-f]").forEach(b => b.onclick = () => modalLab(p, b.dataset.f, data.filter(r=>r.fecha===b.dataset.f)));
+  c.querySelectorAll("[data-lf]").forEach(b => b.onclick = async () => { const f = b.dataset.lf, n = data.filter(r=>r.fecha===f).length;
+    if(!(await confirmar(`¿Eliminar el laboratorio del ${fecha(f)} (${n} valores)? No se puede deshacer.`))) return;
+    const { error } = await sb.from("resultados").delete().eq("paciente_id", p.id).eq("fecha", f); if(error) return fail(error); toast("Laboratorio eliminado"); render(); });
   c.querySelectorAll("[data-pf]").forEach(b => b.onclick = () => imprimirLaboratorio(p, b.dataset.pf, data.filter(r=>r.fecha===b.dataset.pf)));
 }
 function rango(r){
@@ -1106,10 +1109,17 @@ async function modalLab(p, fechaLab=null, previos=[]){
       <label class="f">Fase del ciclo (para FSH, LH, estradiol, progesterona y estrona)<select name="fase"><option value="">— elegir —</option>${FASES.map(x=>`<option ${previos.find(r=>r.fase)?.fase===x?"selected":""}>${x}</option>`).join("")}<option value="-">No corresponde</option></select></label>
       ${(!p.sexo||!p.fecha_nacimiento)?`<div class="wide card" style="background:var(--warn-soft);border-color:transparent;padding:10px 12px"><div style="font-size:13px;font-weight:600;margin-bottom:6px">A ${esc(p.nombre)} le falta ${[!p.sexo&&"el sexo",!p.fecha_nacimiento&&"la fecha de nacimiento"].filter(Boolean).join(" y ")}. Se usan para elegir el rango por edad y sexo (testosterona, DHEA, etc.). Si lo completás acá, queda guardado en su ficha.</div><div class="fields">${!p.sexo?`<label class="f">Sexo<select name="pac_sexo"><option value=""></option><option>Femenino</option><option>Masculino</option></select></label>`:""}${!p.fecha_nacimiento?`<label class="f">Fecha de nacimiento<input name="pac_nac" type="date"></label>`:""}</div></div>`:""}
       <label class="f">Buscar determinación<input id="qdet" placeholder="ej. ferritina, TSH…"></label></div>
+      <div id="ldup" hidden class="card" style="background:var(--warn-soft);border-color:transparent;padding:10px 12px"></div>
       <p class="muted" style="margin:0">Completá solo los valores que vinieron en el análisis. Los vacíos se ignoran.</p>
       <div id="dets">${grupos.map(g=>`<div class="labgroup" data-g="${esc(g)}"><h3>${esc(g)}</h3>${dets.filter(d=>d.grupo===g).map(d=>`<div class="labrow" data-n="${esc(d.nombre.toLowerCase())}"><span>${esc(d.nombre)} <span class="rng">${esc(d.unidad||"")}</span></span>${d.calculada?`<input type="text" readonly data-calc="${esc(d.clave||"")}" data-num="${esc(d.calc_num||"")}" data-den="${esc(d.calc_den||"")}" value="${prev[d.id]?.valor??""}" placeholder="automático" title="Se calcula solo" style="background:var(--surface2);font-weight:700">`:(d.cualitativa?`<select data-d="${d.id}" data-clave="${esc(d.clave||"")}"><option value=""></option><option value="0" ${prev[d.id]&&Number(prev[d.id].valor)===0?"selected":""}>No reactivo</option><option value="1" ${prev[d.id]&&Number(prev[d.id].valor)!==0?"selected":""}>Reactivo</option></select>`:`<input type="number" step="any" inputmode="decimal" data-d="${d.id}" data-clave="${esc(d.clave||"")}" value="${prev[d.id]?.valor??""}" placeholder="valor">`)}<span class="rng">${d.rango_por==="fase"?"según fase":d.rango_por==="edad"?"según edad":(d.ref_min!=null||d.ref_max!=null?rtxt(d.ref_min,d.ref_max):"")}</span></div>`).join("")}</div>`).join("")}</div>
       <div class="row">${fechaLab?`<button type="button" class="btn danger" id="bdell">Eliminar este análisis</button>`:""}<button class="btn pri right" type="submit">Guardar laboratorio</button></div>
     </form>`);
+  const chequearFecha = async () => { const f = $("#fl [name=fecha]").value, box = $("#ldup"); if(!f || f===fechaLab){ box.hidden = true; return; }
+    const { count } = await sb.from("resultados").select("id", { count:"exact", head:true }).eq("paciente_id", p.id).eq("fecha", f);
+    if(!count){ box.hidden = true; return; }
+    box.hidden = false; box.innerHTML = `<b>Atención:</b> ya hay un laboratorio del ${fecha(f)} cargado para ${esc(p.nombre)} (${count} valores). Si guardás, te voy a preguntar si sumar estos valores a ese análisis. <button type="button" class="btn ghost" id="labrir">Abrir ese análisis</button>`;
+    $("#labrir").onclick = async () => { const { data } = await sb.from("v_resultados").select("*").eq("paciente_id", p.id).eq("fecha", f); modalLab(p, f, data||[]); }; };
+  $("#fl [name=fecha]").addEventListener("change", chequearFecha); chequearFecha();
   const calcIndices = () => document.querySelectorAll('#dets [data-calc]').forEach(out => {
     const n = parseFloat(document.querySelector(`#dets [data-clave="${out.dataset.num}"]`)?.value), d = parseFloat(document.querySelector(`#dets [data-clave="${out.dataset.den}"]`)?.value);
     out.value = (!isNaN(n) && d) ? (Math.round(n/d*100)/100).toString() : ""; });
@@ -1124,6 +1134,11 @@ async function modalLab(p, fechaLab=null, previos=[]){
     if(!faseSel && filas.some(x=>porFase.has(x.determinacion_id))) return toast("Elegí la fase del ciclo (o “No corresponde”) para evaluar FSH, LH, estradiol, progesterona o estrona.");
     const upd = {}; if(fd.get("pac_sexo")) upd.sexo = fd.get("pac_sexo"); if(fd.get("pac_nac")) upd.fecha_nacimiento = fd.get("pac_nac");
     if(Object.keys(upd).length){ const r = await sb.from("pacientes").update(upd).eq("id",p.id); if(r.error) return fail(r.error); }
+    // ¿ya hay un análisis cargado en esa fecha (distinto del que se está editando)?
+    if(f !== fechaLab){ const { count } = await sb.from("resultados").select("id", { count:"exact", head:true }).eq("paciente_id", p.id).eq("fecha", f);
+      if(count){ const sumar = await confirmar2(`Ya hay un laboratorio cargado el ${fecha(f)} con ${count} valores. ¿Sumar estos valores a ese análisis? (si un valor ya estaba, se reemplaza)`, "Sí, sumarlos", "Cancelar");
+        if(!sumar) return;
+        const r0 = await sb.from("resultados").delete().eq("paciente_id", p.id).eq("fecha", f).in("determinacion_id", filas.map(x=>x.determinacion_id)); if(r0.error) return fail(r0.error); } }
     if(fechaLab){ const r = await sb.from("resultados").delete().eq("paciente_id",p.id).eq("fecha",fechaLab); if(r.error) return fail(r.error); }
     const { error } = await sb.from("resultados").insert(filas); if(error) return fail(error);
     cerrarModal(); toast(`${filas.length} valores guardados`); location.hash = `#/p/${p.id}/labs`; render();
