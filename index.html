@@ -216,7 +216,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31y";
+const APP_VERSION = "2026-10-31z";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -574,7 +574,8 @@ async function vInicio(v){
     <div class="row" style="margin-bottom:16px"><button class="btn pri" id="hent">Entrega de producto</button><button class="btn" id="hcomp">+ Cargar compra</button></div>
     <div class="card tight" style="margin-bottom:16px"><div style="padding:14px 16px 4px" class="row"><h2 style="margin:0">Turnos de esta semana</h2><a class="btn ghost right" href="#/agenda">Ver agenda</a><button class="btn pri" id="hturno">+ Turno</button></div>
       ${tsem.length?`<ul class="list">${tsem.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left" data-ht="${t.id}"><div class="main"><div class="t">${fechaLarga(t.fecha)} · ${t.hora.slice(0,5)} · ${t.modalidad==="Virtual"?"💻 ":""}${esc(t.paciente)}</div><div class="s">${esc(t.motivo||"")}${t.whatsapp_enviado?" · WhatsApp enviado ✓":""}</div></div><span class="pill ${estadoTurnoClase(t.estado)}">${t.estado}</span></button></li>`).join("")}</ul>`:`<div class="empty">No hay turnos de acá al domingo.</div>`}</div>
-    <div class="grid g3" style="margin-bottom:16px">
+    <button class="btn ghost" id="hfact" style="margin:-4px 0 8px;padding-left:0">👁 Ver facturación del mes</button>
+    <div class="grid g3" id="hfactbox" hidden style="margin-bottom:16px">
       <div class="card stat"><div class="n">${pesos(tot)}</div><div class="l">Facturado este mes · ${vm.length} visitas</div></div>
       <div class="card stat"><div class="n">${pesos(est)}</div><div class="l">${areaPill("Estética")} este mes</div></div>
       <div class="card stat"><div class="n">${pesos(fun)}</div><div class="l">${areaPill("Funcional")} este mes</div></div>
@@ -588,6 +589,7 @@ async function vInicio(v){
   buscadorPacientes($("#qhome"), $("#reshome"));
   $("#hent").onclick = () => modalEntrega(null);
   $("#hturno").onclick = () => modalTurno({ fecha: hoy() });
+  $("#hfact").onclick = () => { const b=$("#hfactbox"); b.hidden = !b.hidden; $("#hfact").textContent = b.hidden ? "👁 Ver facturación del mes" : "Ocultar facturación"; };
   v.querySelectorAll("[data-ht]").forEach(b=>b.onclick=()=>modalTurno(tsem.find(t=>t.id===b.dataset.ht)));
   $("#hcomp").onclick = () => modalCompra();
 }
