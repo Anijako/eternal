@@ -216,7 +216,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-11-01k";
+const APP_VERSION = "2026-11-01l";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -1203,7 +1203,7 @@ async function vStock(v, tab){
       <button class="btn" id="bcomp">+ Cargar compra</button>
       <button class="btn pri" id="bent">Entrega de producto</button></div>
     <p class="sub">Cada compra genera un lote (L-0200, L-0201…) y una etiqueta por unidad. Al entregar, se dan de baja primero las unidades de los lotes más antiguos.</p>
-    <div class="tabs">${[["productos","Productos"],["lotes","Lotes / compras"],["buscar","Buscar unidad"]].map(([k,t])=>`<button class="tab ${tab===k?"on":""}" data-st="${k}">${t}</button>`).join("")}</div>
+    <div class="tabs">${[["productos","Productos"],["pedidos","Pedidos"],["lotes","Lotes / compras"],["buscar","Buscar unidad"]].map(([k,t])=>`<button class="tab ${tab===k?"on":""}" data-st="${k}">${t}</button>`).join("")}</div>
     <div id="stc"></div>`;
   $("#bnprod").onclick = () => modalProducto({});
   $("#bcomp").onclick = () => modalCompra();
@@ -1213,6 +1213,7 @@ async function vStock(v, tab){
   if(tab==="productos") return tabProductos(c, prods);
   if(tab==="lotes") return tabLotes(c);
   if(tab==="buscar") return tabBuscarUnidad(c);
+  if(tab==="pedidos") return tabPedidos(c);
 }
 function tabProductos(c, prods){
   const cats = [...new Set(prods.map(p=>p.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es"));
@@ -1285,17 +1286,19 @@ async function modalProducto(p){
     cerrarModal(); toast(nuevo?`Producto registrado con el código ${cod6(r.data.codigo)}`:"Producto guardado"); cache.productos=null; render(); };
 }
 
-async function modalCompra(){
+async function modalCompra(pre=null){
   const prods = (await catalogo("productos", true)).filter(x=>x.activo);
   const [{ data: ult }, { data: provs }] = await Promise.all([
     sb.from("lotes").select("numero").gte("numero",200).order("numero",{ascending:false}).limit(1),
     sb.from("lotes").select("proveedor").not("proveedor","is",null).limit(500)
   ]);
+  const { data: provPed } = await sb.from("pedidos").select("proveedor").limit(500);
   const proximo = ult?.length ? ult[0].numero + 1 : 200;
-  const proveedores = [...new Set((provs||[]).map(x=>x.proveedor))].sort();
+  const proveedores = [...new Set([...(provs||[]), ...(provPed||[])].map(x=>x.proveedor).filter(Boolean))].sort();
   const extraC = x => `data-c="${x.costo??""}" data-p="${x.precio??""}"`;
   let opciones = opcionesProductos(prods, null, extraC);
-  abrirModal("Cargar compra", `<form id="fc" class="grid">
+  abrirModal(pre ? `Recibir pedido N° ${pre.numero} · ${pre.proveedor}` : "Cargar compra", `<form id="fc" class="grid">
+    ${pre ? `<p class="muted" style="margin:0">Revisá las cantidades que llegaron y los costos reales. Si algo no llegó, poné la cantidad recibida o quitá el renglón: el pedido queda como “Parcial” con lo que falta.</p>` : ""}
     <div class="card" style="background:var(--accent-soft);border-color:transparent"><div class="row"><div><div class="muted" style="font-size:13px;font-weight:600">LOTE DE ESTA COMPRA</div><div style="font-family:var(--display);font-size:28px" id="lnum">${lote4(proximo)}</div></div>
       <label class="right" style="display:flex;align-items:center;gap:8px;font-size:14px"><input type="checkbox" id="lprev" style="width:auto;min-height:0"> Es stock anterior (lote previo a L-0200)</label></div>
       <label class="f" id="lprevbox" hidden style="margin-top:8px">Número de lote anterior (1 a 199)<input id="lprevnum" type="number" min="1" max="199" inputmode="numeric"></label></div>
@@ -1311,7 +1314,7 @@ async function modalCompra(){
     <div class="row"><span class="muted" id="cres"></span><button class="btn pri right" type="submit">Guardar compra y ver etiquetas</button></div></form>`);
   const box = $("#cits");
   const resumen = () => { let u=0, t=0; box.querySelectorAll(".citem").forEach(r=>{ const q=+$(".c-cant",r).value||0; u+=q; t+=q*(+$(".c-cost",r).value||0); }); $("#cres").textContent = `${u} unidades · ${u} etiquetas · costo ${pesos(t)}`; };
-  const agregar = (prodId) => {
+  const agregar = (prodId, cant, costo) => {
     box.insertAdjacentHTML("beforeend", `<div class="itemrow citem" style="grid-template-columns:minmax(160px,1fr) 70px 105px 105px 90px 40px">
       <label class="f">Producto<select class="c-prod" required>${opciones}</select></label>
       <label class="f">Cant.<input class="c-cant" type="number" min="1" step="1" inputmode="numeric" required value="1"></label>
@@ -1323,12 +1326,14 @@ async function modalCompra(){
     mascaraMMAA($(".c-vto",r)); $(".c-vto",r).oninput = () => { $(".c-vto",r).dataset.tocado = 1; };
     $(".c-vto",r).addEventListener("input", () => r.querySelector(".c-vto").dataset.tocado = 1);
     $(".c-prod",r).onchange = e => { const o=e.target.selectedOptions[0]; if(o?.dataset.c) $(".c-cost",r).value=o.dataset.c; if(o?.dataset.p) $(".c-pv",r).value=o.dataset.p; resumen(); };
-    if(prodId){ $(".c-prod",r).value = prodId; $(".c-prod",r).onchange({target:$(".c-prod",r)}); }
+    if(prodId){ $(".c-prod",r).value = prodId; $(".c-prod",r).onchange({target:$(".c-prod",r)}); r.dataset.prod = prodId; }
+    if(cant) $(".c-cant",r).value = cant;
+    if(costo!=null && costo!=="") $(".c-cost",r).value = costo;
     $(".c-cant",r).oninput = $(".c-cost",r).oninput = resumen;
     $(".x",r).onclick = () => { if(box.children.length>1){ r.remove(); resumen(); } };
     resumen();
   };
-  agregar();
+  if(pre){ $("#fc [name=proveedor]").value = pre.proveedor; pre.items.forEach(i=>agregar(i.producto_id, i.cantidad, i.costo)); } else agregar();
   $("#caddp").onclick = () => agregar();
   $("#cnewp").onclick = () => { $("#cnewbox").hidden = false; $("#cnn").focus(); };
   selectCategoria($("#cnc2"), "");
@@ -1361,8 +1366,79 @@ async function modalCompra(){
     const btn = e.target.querySelector("[type=submit]"); btn.disabled = true;
     const { data, error } = await sb.rpc("registrar_compra", { p_fecha: f.fecha, p_proveedor: f.proveedor.trim(), p_factura: f.nro_factura || null, p_numero: numero, p_items: items });
     btn.disabled = false; if(error) return fail(error);
-    cache.productos = null; toast(`Compra guardada en el lote ${lote4(data.numero)}`); render(); modalEtiquetas(data.id);
+    if(pre){ // actualizar el pedido con lo recibido
+      const recibidos = {}; items.forEach(i => recibidos[i.producto_id] = (recibidos[i.producto_id]||0) + i.cantidad);
+      for(const it of pre.items){ const r = recibidos[it.producto_id] || 0; if(r){ const usar = Math.min(r, it.cantidad); recibidos[it.producto_id] -= usar;
+        await sb.from("pedido_items").update({ recibido: it.recibido_previo + usar }).eq("id", it.id); } }
+      const { data: its } = await sb.from("pedido_items").select("cantidad,recibido").eq("pedido_id", pre.id);
+      const completo = (its||[]).every(x=>x.recibido >= x.cantidad);
+      await sb.from("pedidos").update({ estado: completo ? "Recibido" : "Parcial", lotes: [...(pre.lotes||[]), data.id] }).eq("id", pre.id);
+    }
+    cache.productos = null; toast(`Compra guardada en el lote ${lote4(data.numero)}${pre?" · pedido actualizado":""}`); render(); modalEtiquetas(data.id);
   };
+}
+
+/* ---------- PEDIDOS A PROVEEDORES ---------- */
+const estadoPedidoClase = e => ({"Pendiente":"s-info","Parcial":"s-warn","Recibido":"s-ok","Cancelado":"s-none"}[e]||"s-none");
+async function tabPedidos(c){
+  const { data: peds, error } = await sb.from("pedidos").select("*, pedido_items(id,producto_id,cantidad,costo_estimado,recibido,productos(nombre,codigo))").order("numero",{ascending:false}).limit(300); if(error) throw error;
+  c.innerHTML = `<div class="row" style="margin-bottom:12px"><select id="pfil" style="width:auto"><option value="abiertos">Pendientes y parciales</option><option value="">Todos</option><option>Recibido</option><option>Cancelado</option></select>
+      <div class="search" style="flex:1;min-width:200px">${ICON.search}<input id="pq" placeholder="Buscar por proveedor o producto"></div><button class="btn pri" id="pnuevo">+ Nuevo pedido</button></div><div id="plist"></div>`;
+  const pintar = () => { const f = $("#pfil").value, q = $("#pq").value.trim().toLowerCase();
+    const L = (peds||[]).filter(p => (f==="abiertos" ? ["Pendiente","Parcial"].includes(p.estado) : (!f || p.estado===f)) && (!q || p.proveedor.toLowerCase().includes(q) || p.pedido_items.some(i=>(i.productos?.nombre||"").toLowerCase().includes(q))));
+    $("#plist").innerHTML = L.length ? L.map(p => { const tot = p.pedido_items.reduce((a,i)=>a+i.cantidad,0), rec = p.pedido_items.reduce((a,i)=>a+Math.min(i.recibido,i.cantidad),0);
+      return `<div class="card" style="margin-bottom:10px"><div class="row"><b style="font-size:17px">Pedido N° ${p.numero} · ${esc(p.proveedor)}</b><span class="pill ${estadoPedidoClase(p.estado)}">${p.estado}</span><span class="muted right">${fecha(p.fecha)} · ${rec}/${tot} unidades recibidas</span></div>
+        <table style="margin-top:6px"><tbody>${p.pedido_items.map(i=>`<tr><td><code>${cod6(i.productos?.codigo||0)}</code> ${esc(i.productos?.nombre||"")}</td><td class="num">${i.cantidad} pedidas</td><td class="num ${i.recibido>=i.cantidad?"":"muted"}">${i.recibido} recibidas</td><td class="num muted">${i.costo_estimado!=null?pesos(i.costo_estimado)+" c/u":""}</td></tr>`).join("")}</tbody></table>
+        ${p.notas?`<p class="muted" style="margin:6px 0 0">${esc(p.notas)}</p>`:""}
+        <div class="row" style="margin-top:8px">${["Pendiente","Parcial"].includes(p.estado)?`<button class="btn pri" data-prec="${p.id}">Recibir → pasar a compra</button><button class="btn" data-ped="${p.id}">Editar</button>`:""}
+          <a class="btn ghost" href="https://wa.me/?text=${encodeURIComponent(textoPedido(p))}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+          ${["Pendiente","Parcial"].includes(p.estado)?`<button class="btn ghost danger right" data-pcan="${p.id}">Cancelar pedido</button>`:""}</div></div>`; }).join("")
+      : `<div class="card empty">${(peds||[]).length?"No hay pedidos con ese filtro.":"Todavía no hay pedidos. Tocá “+ Nuevo pedido”."}</div>`;
+    $("#plist").querySelectorAll("[data-prec]").forEach(b=>b.onclick=()=>{ const p = peds.find(x=>x.id===b.dataset.prec);
+      const items = p.pedido_items.filter(i=>i.recibido < i.cantidad).map(i=>({ id:i.id, producto_id:i.producto_id, cantidad:i.cantidad - i.recibido, costo:i.costo_estimado, recibido_previo:i.recibido }));
+      modalCompra({ id:p.id, numero:p.numero, proveedor:p.proveedor, lotes:p.lotes, items }); });
+    $("#plist").querySelectorAll("[data-ped]").forEach(b=>b.onclick=()=>modalPedido(peds.find(x=>x.id===b.dataset.ped)));
+    $("#plist").querySelectorAll("[data-pcan]").forEach(b=>b.onclick=async()=>{ if(!(await confirmar("¿Cancelar este pedido?"))) return; const { error } = await sb.from("pedidos").update({ estado:"Cancelado" }).eq("id", b.dataset.pcan); if(error) return fail(error); toast("Pedido cancelado"); render(); });
+  };
+  $("#pfil").onchange = pintar; $("#pq").oninput = pintar; $("#pnuevo").onclick = () => modalPedido({});
+  pintar();
+}
+function textoPedido(p){
+  return `Hola! Te paso el pedido de Eternal Secret (N° ${p.numero}):\n` + p.pedido_items.map(i=>`• ${i.productos?.nombre||""}: ${i.cantidad - (p.estado==="Parcial"?i.recibido:0)}`).join("\n") + (p.notas?`\n${p.notas}`:"") + `\nGracias!`;
+}
+async function modalPedido(p){
+  const nuevo = !p.id;
+  const prods = (await catalogo("productos", true)).filter(x=>x.activo);
+  const [{ data: a }, { data: b }] = await Promise.all([sb.from("lotes").select("proveedor").limit(500), sb.from("pedidos").select("proveedor").limit(500)]);
+  const proveedores = [...new Set([...(a||[]), ...(b||[])].map(x=>x.proveedor).filter(Boolean))].sort();
+  const filas = nuevo ? [{ producto_id:"", cantidad:1, costo:"" }] : p.pedido_items.map(i=>({ id:i.id, producto_id:i.producto_id, cantidad:i.cantidad, costo:i.costo_estimado??"", recibido:i.recibido }));
+  abrirModal(nuevo ? "Nuevo pedido" : `Pedido N° ${p.numero}`, `<form id="fped" class="grid">
+    <div class="fields"><label class="f">Proveedor<input name="proveedor" list="pprov" required value="${esc(p.proveedor)}" autocomplete="off"><datalist id="pprov">${proveedores.map(x=>`<option>${esc(x)}</option>`).join("")}</datalist></label>
+      <label class="f">Fecha del pedido<input name="fecha" type="date" required value="${p.fecha||hoy()}"></label></div>
+    <div><h3>Productos pedidos</h3><div id="pits"></div><button type="button" class="btn ghost" id="paddi">+ Agregar producto</button></div>
+    <label class="f">Notas (opcional)<input name="notas" value="${esc(p.notas)}" placeholder="ej. entrega el jueves, pagar con transferencia"></label>
+    <div class="row"><button class="btn pri right">${nuevo?"Guardar pedido":"Guardar cambios"}</button></div></form>`);
+  const box = $("#pits");
+  const pintar = () => { box.innerHTML = filas.map((f,i)=>`<div class="row" style="flex-wrap:nowrap;margin-bottom:6px;align-items:flex-end"><label class="f" style="flex:1">Producto<select data-pp="${i}">${opcionesProductos(prods, f.producto_id)}</select></label>
+      <label class="f" style="width:80px">Cantidad<input data-pc="${i}" type="number" min="1" step="1" value="${f.cantidad}"></label>
+      <label class="f" style="width:120px">Costo estimado $<input data-pk="${i}" type="number" step="any" value="${f.costo}" placeholder="opcional"></label>
+      <button type="button" class="iconbtn" data-px="${i}" ${f.recibido?"disabled title='Ya se recibió parte'":""}>×</button></div>`).join("");
+    box.querySelectorAll("[data-pp]").forEach(e=>e.onchange=()=>{ filas[+e.dataset.pp].producto_id = e.value; const pr = prods.find(x=>x.id===e.value); if(pr?.costo!=null && !filas[+e.dataset.pp].costo){ filas[+e.dataset.pp].costo = pr.costo; pintar(); } });
+    box.querySelectorAll("[data-pc]").forEach(e=>e.oninput=()=>filas[+e.dataset.pc].cantidad = Math.max(1, parseInt(e.value)||1));
+    box.querySelectorAll("[data-pk]").forEach(e=>e.oninput=()=>filas[+e.dataset.pk].costo = e.value);
+    box.querySelectorAll("[data-px]").forEach(e=>e.onclick=()=>{ filas.splice(+e.dataset.px,1); pintar(); }); };
+  pintar();
+  $("#paddi").onclick = () => { filas.push({ producto_id:"", cantidad:1, costo:"" }); pintar(); };
+  $("#fped").onsubmit = async e => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.target));
+    const validas = filas.filter(x=>x.producto_id); if(!validas.length) return toast("Agregá al menos un producto.");
+    const cab = { proveedor: f.proveedor.trim(), fecha: f.fecha, notas: f.notas.trim() || null };
+    let pid = p.id;
+    if(nuevo){ const r = await sb.from("pedidos").insert(cab).select("id").single(); if(r.error) return fail(r.error); pid = r.data.id; }
+    else { const r = await sb.from("pedidos").update(cab).eq("id", pid); if(r.error) return fail(r.error);
+      const quitar = p.pedido_items.filter(i=>!validas.some(v=>v.id===i.id)).map(i=>i.id); if(quitar.length){ const r2 = await sb.from("pedido_items").delete().in("id", quitar); if(r2.error) return fail(r2.error); } }
+    for(const v of validas){ const fila = { pedido_id: pid, producto_id: v.producto_id, cantidad: v.cantidad, costo_estimado: v.costo==="" ? null : Number(v.costo) };
+      const r = v.id ? await sb.from("pedido_items").update(fila).eq("id", v.id) : await sb.from("pedido_items").insert(fila); if(r.error) return fail(r.error); }
+    cerrarModal(); toast(nuevo ? "Pedido guardado" : "Pedido actualizado"); render(); };
 }
 
 /* Etiquetas: hoja A4 de 21 (63,5 × 38,1 mm) o rollo de 50 × 30 mm */
