@@ -216,7 +216,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31x";
+const APP_VERSION = "2026-10-31y";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -567,7 +567,8 @@ async function vInicio(v){
   const fun = vm.filter(x=>x.area==="Funcional").reduce((a,x)=>a+Number(x.total||0),0);
   const alertas = prods.filter(x=>x.activo && x.alerta).sort((a,b)=>(a.proximo_vencimiento||"9")>(b.proximo_vencimiento||"9")?1:-1).slice(0,6);
   v.innerHTML = `
-    <h1>Hola, Dra.</h1><p class="sub">${new Date().toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"})}</p>
+    <div class="row" style="flex-wrap:nowrap;align-items:center;margin-bottom:12px"><div style="flex:1;min-width:0"><h1>Hola, Dra. Analía</h1><p class="sub" style="margin:0">${new Date().toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"})}</p></div>
+      <img src="logo.png" alt="Eternal Secret" style="width:92px;height:92px;object-fit:contain;flex:none"></div>
     <div class="search card" style="padding:0;border:none;background:none;margin-bottom:16px">${ICON.search}<input id="qhome" placeholder="Buscar paciente por apellido, nombre o DNI" autocomplete="off"></div>
     <div id="reshome"></div>
     <div class="row" style="margin-bottom:16px"><button class="btn pri" id="hent">Entrega de producto</button><button class="btn" id="hcomp">+ Cargar compra</button></div>
