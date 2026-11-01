@@ -216,7 +216,7 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-10-31z4";
+const APP_VERSION = "2026-11-01a";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -570,7 +570,7 @@ async function editorInsumos(box, tratamientoId){
   const prods = (await catalogo("productos", true)).filter(p=>p.activo);
   const { data: ins } = tratamientoId ? await sb.from("tratamiento_insumos").select("*").eq("tratamiento_id", tratamientoId) : { data: [] };
   const filas = (ins||[]).map(x=>({ producto_id:x.producto_id, cantidad:x.cantidad }));
-  const opciones = sel => `<option value="">— elegir producto —</option>` + ["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(p=>p.linea===l).map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(prodLabel(p))} · stock ${p.stock_actual}</option>`).join("")+`</optgroup>`).join("");
+  const opciones = sel => opcionesProductos(prods, sel);
   const pintar = () => { box.innerHTML = `<h3 style="margin-top:4px">Insumos que se descuentan del stock</h3><p class="muted" style="margin:0 0 6px;font-size:13px">Cada vez que se carga este tratamiento en una visita, se dan de baja estas unidades (de los lotes más antiguos). Ej.: activos, butterfly, suero.</p>
     ${filas.map((f,i)=>`<div class="row" style="flex-wrap:nowrap;margin-bottom:6px"><select data-ip="${i}">${opciones(f.producto_id)}</select><input data-ic="${i}" type="number" min="1" step="1" value="${f.cantidad}" style="width:80px"><button type="button" class="iconbtn" data-ix="${i}">×</button></div>`).join("")}
     <button type="button" class="btn ghost" id="iadd">+ Agregar insumo</button>`;
@@ -719,20 +719,16 @@ async function tabVisitas(c, p){
   c.querySelectorAll("[data-v]").forEach(b => b.onclick = () => modalVisita(p, data.find(x=>x.id===b.dataset.v)));
 }
 async function modalVisita(p, visita=null, preset={}){
-  const [trats, prods] = await Promise.all([catalogo("tratamientos"), catalogo("productos")]);
-  let items = [];
+  const [trats, prods] = await Promise.all([catalogo("tratamientos"), catalogo("productos", true)]);
+  const activos = prods.filter(x=>x.activo);
+  let todos = [];
+  if(visita){ const { data } = await sb.from("visita_items").select("*, productos(nombre)").eq("visita_id", visita.id); todos = data || []; }
+  const tratItems = todos.filter(i=>i.tipo==="Tratamiento");
+  const vendidos = todos.filter(i=>i.tipo==="Producto" || i.tipo==="Medicamento");
+  const faltantes = todos.filter(i=>i.tipo==="Insumo" && !i.producto_id);
   let unidadesPorItem = {};
-  let insumos = [];
-  if(visita){ const { data } = await sb.from("visita_items").select("*, productos(nombre)").eq("visita_id", visita.id); insumos = data.filter(i=>i.tipo==="Insumo"); items = data.filter(i=>i.tipo!=="Insumo");
-    const ids = items.filter(i=>i.producto_id).map(i=>i.id);
-    if(ids.length){ const { data: us } = await sb.from("unidades").select("codigo,visita_item_id").in("visita_item_id", ids); (us||[]).forEach(u=>(unidadesPorItem[u.visita_item_id] ??= []).push(u.codigo)); } }
-  const fila = (it={}) => `<div class="itemrow" data-prod0="${it.producto_id||""}" data-u="${esc((unidadesPorItem[it.id]||[]).join("|"))}">
-      <label class="f">Tipo<select class="it-tipo">${["Tratamiento","Producto","Medicamento"].map(t=>`<option ${it.tipo===t?"selected":""}>${t}</option>`).join("")}</select></label>
-      <label class="f">Qué<select class="it-ref"></select><input class="it-desc" placeholder="Descripción libre (opcional)" value="${esc(it.descripcion)}" style="margin-top:6px">${(unidadesPorItem[it.id]||[]).length?`<span class="muted" style="font-weight:400;font-size:12.5px">Unidades: ${(unidadesPorItem[it.id]).map(esc).join(", ")}</span>`:""}</label>
-      <label class="f">Cant.<input class="it-cant" type="number" min="0" step="any" value="${it.cantidad??1}"></label>
-      <label class="f">Monto $<input class="it-monto" type="number" min="0" step="any" inputmode="decimal" value="${it.monto??""}"></label>
-      <button type="button" class="iconbtn x" title="Quitar">×</button>
-      <div class="it-ins" style="grid-column:1/-1" hidden></div></div>`;
+  if(vendidos.length){ const { data: us } = await sb.from("unidades").select("codigo,visita_item_id").in("visita_item_id", vendidos.map(i=>i.id)); (us||[]).forEach(u=>(unidadesPorItem[u.visita_item_id] ??= []).push(u.codigo)); }
+  const optTrat = sel => `<option value="">— elegir tratamiento —</option>` + trats.filter(t=>t.activo || t.id===sel).map(t=>`<option value="${t.id}" data-precio="${t.precio??""}" ${t.id===sel?"selected":""}>${esc(t.nombre)}${t.area?" ("+t.area+")":""}</option>`).join("");
   abrirModal(visita?"Visita del "+fecha(visita.fecha):"Nueva visita · "+p.nombre, `
     <form id="fv" class="grid">
       <div class="fields">
@@ -741,58 +737,82 @@ async function modalVisita(p, visita=null, preset={}){
         <label class="f wide">Motivo / resumen<input name="motivo" value="${esc(visita?.motivo||preset.motivo)}"></label>
       </div>
       ${visita?.total_historico?`<p class="muted" style="margin:0">Registro de la facturación anterior: ${esc(visita.motivo||"")} · ${pesos(visita.total_historico)}</p>`:""}
-      <div><h3>Tratamientos, productos y medicamentos</h3><div id="its"></div><button type="button" class="btn ghost" id="badd">+ Agregar ítem</button>${insumos.some(i=>!i.producto_id)?`<p style="font-size:13px;margin:6px 0 0;color:var(--warn)">${insumos.filter(i=>!i.producto_id).map(i=>esc(i.observacion||"")).join(" · ")}</p>`:""}</div>
+      <div><h3>1 · Tratamientos</h3><p class="muted" style="margin:-4px 0 8px;font-size:13px">Cargá cada tratamiento con su importe. Dentro de cada uno, los ítems usados (activos, butterfly, suero, cremas…) se descuentan del stock y quedan en el historial.</p>
+        <div id="trs"></div><button type="button" class="btn" id="badt">+ Tratamiento</button>
+        ${faltantes.length?`<p style="font-size:13px;margin:6px 0 0;color:var(--warn)">${faltantes.map(i=>esc(i.observacion||"")).join(" · ")}</p>`:""}</div>
+      <div><h3>2 · Productos vendidos aparte <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">(opcional, con importe)</span></h3><div id="vds"></div><button type="button" class="btn ghost" id="badv">+ Producto vendido</button></div>
       <label class="f">Observaciones<textarea name="observaciones">${esc(visita?.observaciones)}</textarea></label>
       <div class="row"><b>Total: <span id="vtot">$ 0</span></b><span class="right"></span>${visita?`<button type="button" class="btn danger" id="bdelv">Eliminar visita</button>`:""}<button class="btn pri" type="submit">Guardar visita</button></div>
     </form>`);
-  const box = $("#its");
-  const opciones = (tipo) => tipo==="Tratamiento"
-    ? `<option value="">— elegir tratamiento —</option>`+trats.filter(t=>t.activo).map(t=>`<option value="${t.id}" data-precio="${t.precio??""}">${esc(t.nombre)}${t.area?" ("+t.area+")":""}</option>`).join("")
-    : `<option value="">— elegir producto —</option>`+["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(x=>x.linea===l&&x.activo).map(x=>`<option value="${x.id}" data-precio="${x.precio??""}">${esc(prodLabel(x))} · stock ${num(x.stock_actual)}</option>`).join("")+`</optgroup>`).join("");
-  const prodOpts = sel => `<option value="">— elegir —</option>` + ["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(x=>x.linea===l&&x.activo).map(x=>`<option value="${x.id}" ${x.id===sel?"selected":""}>${esc(prodLabel(x))} · stock ${num(x.stock_actual)}</option>`).join("")+`</optgroup>`).join("");
-  const pintarIns = row => { const box2 = $(".it-ins",row); const esTrat = $(".it-tipo",row).value==="Tratamiento" && $(".it-ref",row).value;
-    box2.hidden = !esTrat; if(!esTrat) return;
-    const L = row._ins || [];
-    box2.innerHTML = `<div style="background:var(--surface2);border-radius:10px;padding:8px 10px"><div style="font-size:13px;font-weight:600;margin-bottom:4px">Activos e insumos utilizados <span class="muted" style="font-weight:400">(se descuentan del stock y quedan en el historial)</span></div>
-      ${L.map((x,i)=>`<div class="row" style="flex-wrap:nowrap;margin-bottom:4px"><select data-ip="${i}" style="min-height:38px;padding:6px 8px">${prodOpts(x.producto_id)}</select><input data-ic="${i}" type="number" min="1" step="1" value="${x.cantidad}" style="width:70px;min-height:38px"><button type="button" class="iconbtn" data-ix="${i}">×</button></div>`).join("") || `<div class="muted" style="font-size:13px">Sin insumos.</div>`}
-      <button type="button" class="btn ghost" data-iadd style="min-height:36px;padding:4px 8px">+ Activo / insumo</button></div>`;
-    box2.querySelectorAll("[data-ip]").forEach(e=>e.onchange=()=>{ row._ins[+e.dataset.ip].producto_id = e.value; });
-    box2.querySelectorAll("[data-ic]").forEach(e=>e.oninput=()=>{ row._ins[+e.dataset.ic].cantidad = Math.max(1, parseInt(e.value)||1); });
-    box2.querySelectorAll("[data-ix]").forEach(e=>e.onclick=()=>{ row._ins.splice(+e.dataset.ix,1); pintarIns(row); });
-    $("[data-iadd]",box2).onclick = () => { (row._ins ||= []).push({ producto_id:"", cantidad:1 }); pintarIns(row); }; };
-  const cargarInsDefault = async row => { const tid = $(".it-ref",row).value; if(!tid){ row._ins = null; return pintarIns(row); }
-    const { data } = await sb.from("tratamiento_insumos").select("producto_id,cantidad").eq("tratamiento_id", tid);
-    const k = Math.max(1, parseInt($(".it-cant",row).value)||1); row._ins = (data||[]).map(x=>({ producto_id:x.producto_id, cantidad:x.cantidad*k })); pintarIns(row); };
-  const cablear = (row, it={}) => {
-    const tipo=$(".it-tipo",row), ref=$(".it-ref",row), monto=$(".it-monto",row), cant=$(".it-cant",row);
-    const llenar = () => { ref.innerHTML = opciones(tipo.value); };
-    llenar(); ref.value = it.tratamiento_id || it.producto_id || "";
-    if(it.id && it.tipo==="Tratamiento"){ row._ins = insumos.filter(i=>i.item_padre===it.id && i.producto_id).map(i=>({ producto_id:i.producto_id, cantidad:Number(i.cantidad)||1 })); pintarIns(row); }
-    else if(!it.id && tipo.value==="Tratamiento" && ref.value) cargarInsDefault(row);
-    tipo.onchange = () => { llenar(); row._ins = null; pintarIns(row); total(); };
-    ref.onchange = () => { const pr = ref.selectedOptions[0]?.dataset.precio; if(pr && !monto.value) monto.value = Number(pr) * (Number(cant.value)||1); if(tipo.value==="Tratamiento") cargarInsDefault(row); total(); };
-    monto.oninput = cant.oninput = total;
-    $(".x",row).onclick = () => { row.remove(); total(); };
+  const trs = $("#trs"), vds = $("#vds");
+  function total(){ let s = Number(visita?.total_historico||0); document.querySelectorAll("#fv .t-monto, #fv .v-monto").forEach(m=>s+=Number(m.value||0)); $("#vtot").textContent = pesos(s); }
+  const pintarItems = card => { const box = $(".t-items", card), L = card._items;
+    box.innerHTML = (L.length ? L.map((x,i)=>`<div class="row" style="flex-wrap:nowrap;margin-bottom:4px"><select data-ip="${i}" style="min-height:40px;padding:6px 8px">${opcionesProductos(activos, x.producto_id)}</select><input data-ic="${i}" type="number" min="1" step="1" inputmode="numeric" value="${x.cantidad}" style="width:72px;min-height:40px" aria-label="Cantidad"><button type="button" class="iconbtn" data-ix="${i}" title="Quitar ítem">×</button></div>`).join("") : `<div class="muted" style="font-size:13px;margin-bottom:4px">Sin ítems.</div>`)
+      + `<button type="button" class="btn ghost" data-iadd style="min-height:36px;padding:4px 8px">+ Ítem</button>`;
+    box.querySelectorAll("[data-ip]").forEach(e=>e.onchange=()=>{ L[+e.dataset.ip].producto_id = e.value; });
+    box.querySelectorAll("[data-ic]").forEach(e=>e.oninput=()=>{ L[+e.dataset.ic].cantidad = Math.max(1, parseInt(e.value)||1); });
+    box.querySelectorAll("[data-ix]").forEach(e=>e.onclick=()=>{ L.splice(+e.dataset.ix,1); pintarItems(card); });
+    $("[data-iadd]",box).onclick = () => { L.push({ producto_id:"", cantidad:1 }); pintarItems(card); }; };
+  const agregarTrat = (it={}) => {
+    trs.insertAdjacentHTML("beforeend", `<div class="card tcard" style="padding:12px;margin-bottom:10px">
+      <div class="row" style="flex-wrap:nowrap;align-items:flex-end"><label class="f" style="flex:1">Tratamiento<select class="t-ref">${optTrat(it.tratamiento_id)}</select></label>
+        <label class="f" style="width:130px">Importe $<input class="t-monto" type="number" min="0" step="any" inputmode="decimal" value="${it.monto??""}"></label>
+        <button type="button" class="iconbtn t-x" title="Quitar tratamiento">×</button></div>
+      <input class="t-desc" placeholder="Detalle / descripción (opcional)" value="${esc(it.descripcion)}" style="margin-top:8px">
+      <div style="background:var(--surface2);border-radius:10px;padding:8px 10px;margin-top:8px"><div style="font-size:13px;font-weight:600;margin-bottom:6px">Ítems del tratamiento <span class="muted" style="font-weight:400">· se descuentan del stock</span></div><div class="t-items"></div></div></div>`);
+    const card = trs.lastElementChild;
+    card._items = it.id ? todos.filter(i=>i.tipo==="Insumo" && i.item_padre===it.id && i.producto_id).map(i=>({ producto_id:i.producto_id, cantidad:Number(i.cantidad)||1 })) : (it._items || []);
+    pintarItems(card);
+    const ref = $(".t-ref",card), monto = $(".t-monto",card);
+    ref.onchange = async () => { const pr = ref.selectedOptions[0]?.dataset.precio; if(pr && !monto.value) monto.value = pr; total();
+      if(!ref.value){ card._items = []; return pintarItems(card); }
+      const { data } = await sb.from("tratamiento_insumos").select("producto_id,cantidad").eq("tratamiento_id", ref.value);
+      card._items = (data||[]).map(x=>({ producto_id:x.producto_id, cantidad:x.cantidad })); pintarItems(card); };
+    monto.oninput = total;
+    $(".t-x",card).onclick = () => { card.remove(); total(); };
+    total();
   };
-  const agregar = (it) => { box.insertAdjacentHTML("beforeend", fila(it)); cablear(box.lastElementChild, it); total(); };
-  function total(){ let s = Number(visita?.total_historico||0); box.querySelectorAll(".it-monto").forEach(m=>s+=Number(m.value||0)); $("#vtot").textContent = pesos(s); }
-  (items.length?items:(visita?[]:[{}])).forEach(agregar);
-  $("#badd").onclick = () => agregar({});
-  if(visita) $("#bdelv").onclick = async () => { if(!(await confirmar("¿Eliminar esta visita y sus ítems?"))) return; const { error } = await sb.from("visitas").delete().eq("id",visita.id); if(error) return fail(error); cerrarModal(); toast("Visita eliminada"); cache.productos=null; render(); };
+  const agregarVend = (it={}) => {
+    vds.insertAdjacentHTML("beforeend", `<div class="row vrow" style="flex-wrap:nowrap;align-items:flex-end;margin-bottom:6px" data-prod0="${it.producto_id||""}" data-u="${esc((unidadesPorItem[it.id]||[]).join("|"))}">
+      <label class="f" style="flex:1">Producto<select class="v-ref">${opcionesProductos(activos, it.producto_id)}</select></label>
+      <label class="f" style="width:72px">Cant.<input class="v-cant" type="number" min="1" step="1" value="${it.cantidad??1}"></label>
+      <label class="f" style="width:120px">Importe $<input class="v-monto" type="number" min="0" step="any" inputmode="decimal" value="${it.monto??""}"></label>
+      <button type="button" class="iconbtn v-x" title="Quitar">×</button></div>`);
+    const row = vds.lastElementChild, ref=$(".v-ref",row), cant=$(".v-cant",row), monto=$(".v-monto",row);
+    ref.onchange = () => { const pr = activos.find(x=>x.id===ref.value)?.precio; if(pr!=null && !monto.value) monto.value = pr*(Number(cant.value)||1); total(); };
+    monto.oninput = total; $(".v-x",row).onclick = () => { row.remove(); total(); };
+    total();
+  };
+  // Visitas viejas cargadas con descripción libre (sin tratamiento del catálogo) se muestran como tratamiento sin seleccionar
+  tratItems.forEach(agregarTrat);
+  todos.filter(i=>i.tipo!=="Insumo" && i.tipo!=="Tratamiento" && !i.producto_id && (i.descripcion||i.monto)).forEach(i=>agregarTrat({ ...i, tratamiento_id:null }));
+  vendidos.filter(i=>i.producto_id).forEach(agregarVend);
+  if(!visita) agregarTrat({});
+  $("#badt").onclick = () => agregarTrat({});
+  $("#badv").onclick = () => agregarVend({});
+  total();
+  if(visita) $("#bdelv").onclick = async () => { if(!(await confirmar("¿Eliminar esta visita y sus ítems? Los productos vuelven al stock."))) return; const { error } = await sb.from("visitas").delete().eq("id",visita.id); if(error) return fail(error); cerrarModal(); toast("Visita eliminada"); cache.productos=null; render(); };
   $("#fv").onsubmit = async e => { e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target)); for(const k in d) if(d[k]==="") d[k]=null;
-    const filas = [...box.querySelectorAll(".itemrow")].map(r => {
-      const tipo=$(".it-tipo",r).value, ref=$(".it-ref",r).value||null;
-      return { tipo, tratamiento_id: tipo==="Tratamiento"?ref:null, producto_id: tipo!=="Tratamiento"?ref:null,
-        descripcion: $(".it-desc",r).value.trim() || null, cantidad: Number($(".it-cant",r).value||1), monto: Number($(".it-monto",r).value||0),
-        unidades_pedidas: (tipo!=="Tratamiento" && ref && ref===r.dataset.prod0 && r.dataset.u) ? r.dataset.u.split("|").slice(0, Number($(".it-cant",r).value||1)) : null,
-        insumos: (tipo==="Tratamiento" && ref && Array.isArray(r._ins)) ? r._ins.filter(x=>x.producto_id) : null };
-    }).filter(x => x.tratamiento_id || x.producto_id || x.descripcion || x.monto);
+    const filas = [];
+    for(const card of trs.querySelectorAll(".tcard")){
+      const ref = $(".t-ref",card).value || null, desc = $(".t-desc",card).value.trim() || null, monto = Number($(".t-monto",card).value||0);
+      const items = card._items.filter(x=>x.producto_id);
+      if(!ref && !desc && !monto && !items.length) continue;
+      if(!ref && items.length) return toast("Elegí el tratamiento al que pertenecen los ítems.");
+      filas.push({ tipo: ref ? "Tratamiento" : "Producto", tratamiento_id: ref, producto_id: null, descripcion: desc || (!ref ? "Tratamiento" : null), cantidad: 1, monto, insumos: ref ? items : null });
+    }
+    for(const row of vds.querySelectorAll(".vrow")){
+      const ref = $(".v-ref",row).value || null; if(!ref) continue; const cant = Math.max(1, parseInt($(".v-cant",row).value)||1);
+      filas.push({ tipo:"Producto", tratamiento_id:null, producto_id:ref, descripcion:null, cantidad:cant, monto:Number($(".v-monto",row).value||0),
+        unidades_pedidas: (ref===row.dataset.prod0 && row.dataset.u) ? row.dataset.u.split("|").slice(0, cant) : null });
+    }
+    const btn = e.target.querySelector("[type=submit]"); btn.disabled = true;
     let vid = visita?.id;
-    if(visita){ const r = await sb.from("visitas").update(d).eq("id",vid); if(r.error) return fail(r.error);
-      const r2 = await sb.from("visita_items").delete().eq("visita_id",vid); if(r2.error) return fail(r2.error); }
-    else { const r = await sb.from("visitas").insert({ ...d, paciente_id: p.id }).select().single(); if(r.error) return fail(r.error); vid = r.data.id; }
-    if(filas.length){ const r = await sb.from("visita_items").insert(filas.map(x=>({...x, visita_id: vid}))); if(r.error) return fail(r.error); }
+    if(visita){ const r = await sb.from("visitas").update(d).eq("id",vid); if(r.error){ btn.disabled=false; return fail(r.error); }
+      const r2 = await sb.from("visita_items").delete().eq("visita_id",vid); if(r2.error){ btn.disabled=false; return fail(r2.error); } }
+    else { const r = await sb.from("visitas").insert({ ...d, paciente_id: p.id }).select().single(); if(r.error){ btn.disabled=false; return fail(r.error); } vid = r.data.id; }
+    if(filas.length){ const r = await sb.from("visita_items").insert(filas.map(x=>({...x, visita_id: vid}))); if(r.error){ btn.disabled=false; return fail(r.error); } }
     cerrarModal(); toast("Visita guardada"); cache.productos=null; render();
   };
 }
@@ -1074,6 +1094,17 @@ const cod6 = n => String(n).padStart(6,"0");
 const mmaa = s => { if(!s) return "—"; const [y,m] = s.slice(0,10).split("-"); return `${m}/${y.slice(2)}`; };
 const mmaaAFecha = t => { const m = (t||"").trim().match(/^(\d{1,2})\s*[\/\-.]?\s*(\d{2})$/); if(!m) return null; const mo=+m[1], y=2000+ +m[2]; if(mo<1||mo>12) return null; const d=new Date(y,mo,0).getDate(); return `${y}-${String(mo).padStart(2,"0")}-${String(d).padStart(2,"0")}`; };
 const sumarMeses = (iso, n) => { const [y,m] = iso.split("-").map(Number); const t = m-1+n; return `${String(t%12+1).padStart(2,"0")}/${String(y+Math.floor(t/12)).slice(2)}`; };
+const CATS_DEF = ["Activos","Cremas","Limpieza","Vacunas","Serum","Tónicos","Contornos de Ojos","Protectores solares","Bálsamos labiales","Insumos","Suplementos","Capilar"];
+async function categorias(){ try{ const v = await leerConfig("categorias_productos", CATS_DEF); return Array.isArray(v) ? v : CATS_DEF; }catch(e){ return CATS_DEF; } }
+async function agregarCategoria(nombre){ const L = await categorias(); if(L.some(x=>x.toLowerCase()===nombre.toLowerCase())) return L; const N = [...L, nombre].sort((a,b)=>a.localeCompare(b,"es"));
+  await sb.from("config").upsert({ clave:"categorias_productos", valor:N }); return N; }
+function selectCategoria(sel, actual){ // <select> con opción para crear una nueva categoría
+  sel.onchange = async () => { if(sel.value !== "__nueva") return; const n = (prompt("Nombre de la nueva categoría:")||"").trim(); if(!n){ sel.value = actual||""; return; }
+    const L = await agregarCategoria(n); sel.innerHTML = opcionesCategoria(L, n); }; }
+const opcionesCategoria = (L, actual) => `<option value="">— sin categoría —</option>` + L.map(c=>`<option ${c===actual?"selected":""}>${esc(c)}</option>`).join("") + (actual && !L.includes(actual) ? `<option selected>${esc(actual)}</option>` : "") + `<option value="__nueva">+ Nueva categoría…</option>`;
+// opciones de productos agrupadas por categoría
+const opcionesProductos = (prods, sel, extra=p=>"") => { const grupos = {}; prods.forEach(p => (grupos[p.categoria||"Sin categoría"] ??= []).push(p));
+  return `<option value="">— elegir producto —</option>` + Object.keys(grupos).sort((a,b)=>a==="Sin categoría"?1:b==="Sin categoría"?-1:a.localeCompare(b,"es")).map(g=>`<optgroup label="${esc(g)}">`+grupos[g].sort((a,b)=>a.nombre.localeCompare(b.nombre,"es")).map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""} ${extra(p)}>${esc(p.codigo_txt+" · "+p.nombre)} · stock ${p.stock_actual}</option>`).join("")+`</optgroup>`).join(""); };
 const prodLabel = p => `${p.codigo_txt} · ${p.nombre}`;
 function areaDeLineas(lineas){ const s=[...new Set(lineas)]; return s.length===1 ? s[0] : "Funcional y Estética"; }
 function mascaraMMAA(inp){ inp.addEventListener("input", () => { let v = inp.value.replace(/[^\d]/g,"").slice(0,4); if(v.length>2) v = v.slice(0,2)+"/"+v.slice(2); inp.value = v; }); }
@@ -1100,24 +1131,30 @@ async function vStock(v, tab){
   if(tab==="buscar") return tabBuscarUnidad(c);
 }
 function tabProductos(c, prods){
-  c.innerHTML = `<div class="row" style="margin-bottom:12px"><div class="search" style="flex:1;min-width:200px">${ICON.search}<input id="qs" placeholder="Buscar por nombre o código"></div>
+  const cats = [...new Set(prods.map(p=>p.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es"));
+  c.innerHTML = `<div class="row" style="margin-bottom:12px"><div class="search" style="flex:1;min-width:200px">${ICON.search}<input id="qs" placeholder="Buscar por nombre, código o categoría"></div>
+      <select id="fcat" style="width:auto"><option value="">Todas las categorías</option>${cats.map(x=>`<option>${esc(x)}</option>`).join("")}<option value="-">Sin categoría</option></select>
       <select id="fl" style="width:auto"><option value="">Funcional y Estética</option><option>Funcional</option><option>Estética</option></select>
       <select id="fal" style="width:auto"><option value="">Todos</option><option value="1">Solo con alerta</option></select></div>
-    <div class="card tight"><div class="tablewrap"><table><thead><tr><th>Código</th><th>Producto</th><th>Línea</th><th class="num">Stock</th><th>Próx. vto.</th><th>Estado</th><th class="num">Precio</th><th></th></tr></thead><tbody id="ts"></tbody></table></div></div>`;
-  const pinta = () => { const q=$("#qs").value.trim().toLowerCase(), l=$("#fl").value, a=$("#fal").value;
-    const L = prods.filter(p=>p.activo && (!q || p.nombre.toLowerCase().includes(q) || p.codigo_txt.includes(q.replace(/^0+/,"")) || String(p.codigo)===q.replace(/^0+/,"")) && (!l||p.linea===l) && (!a||p.alerta));
-    $("#ts").innerHTML = L.map(p=>`<tr><td><code>${p.codigo_txt}</code></td><td><b>${esc(p.nombre)}</b></td><td>${areaPill(p.linea)}</td><td class="num">${num(p.stock_actual)}</td><td>${mmaa(p.proximo_vencimiento)}</td><td><span class="pill ${alertaClase(p.alerta)}">${esc(p.alerta||"OK")}</span></td><td class="num">${pesos(p.precio)}</td><td><button class="btn ghost" data-e="${p.id}">Ver</button></td></tr>`).join("")
-      || `<tr><td colspan="8"><div class="empty">${prods.length?"Sin resultados.":"Todavía no hay productos. Tocá “+ Registrar producto” para cargar el primero."}</div></td></tr>`;
+    <div class="card tight"><div class="tablewrap"><table><thead><tr><th>Código</th><th>Producto</th><th>Categoría</th><th>Línea</th><th class="num">Stock</th><th>Próx. vto.</th><th>Estado</th><th class="num">Precio</th><th></th></tr></thead><tbody id="ts"></tbody></table></div></div>`;
+  const pinta = () => { const q=$("#qs").value.trim().toLowerCase(), l=$("#fl").value, a=$("#fal").value, ct=$("#fcat").value;
+    const L = prods.filter(p=>p.activo && (!q || p.nombre.toLowerCase().includes(q) || (p.categoria||"").toLowerCase().includes(q) || p.codigo_txt.includes(q.replace(/^0+/,"")) || String(p.codigo)===q.replace(/^0+/,"")) && (!l||p.linea===l) && (!a||p.alerta) && (!ct || (ct==="-" ? !p.categoria : p.categoria===ct)));
+    $("#ts").innerHTML = L.map(p=>`<tr><td><code>${p.codigo_txt}</code></td><td><b>${esc(p.nombre)}</b></td><td class="muted">${esc(p.categoria||"—")}</td><td>${areaPill(p.linea)}</td><td class="num">${num(p.stock_actual)}</td><td>${mmaa(p.proximo_vencimiento)}</td><td><span class="pill ${alertaClase(p.alerta)}">${esc(p.alerta||"OK")}</span></td><td class="num">${pesos(p.precio)}</td><td><button class="btn ghost" data-e="${p.id}">Ver</button></td></tr>`).join("")
+      || `<tr><td colspan="9"><div class="empty">${prods.length?"Sin resultados.":"Todavía no hay productos. Tocá “+ Registrar producto” para cargar el primero."}</div></td></tr>`;
     $("#ts").querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>modalProducto(prods.find(x=>x.id===b.dataset.e)));
   };
-  ["qs","fl","fal"].forEach(id=>$("#"+id).oninput=pinta); pinta();
+  ["qs","fl","fal","fcat"].forEach(id=>$("#"+id).oninput=pinta); pinta();
 }
 async function tabLotes(c){
-  const { data, error } = await sb.from("v_lotes").select("*").order("numero",{ascending:false}).limit(200); if(error) throw error;
-  c.innerHTML = `<div class="card tight">${data.length?`<div class="tablewrap"><table><thead><tr><th>Lote</th><th>Fecha</th><th>Proveedor</th><th>Productos</th><th class="num">Unid.</th><th class="num">En stock</th><th class="num">Costo</th><th></th></tr></thead><tbody>${data.map(l=>`<tr><td><b>${l.lote}</b></td><td>${fecha(l.fecha)}</td><td>${esc(l.proveedor||"")}${l.nro_factura?`<div class="muted" style="font-size:12.5px">Fact. ${esc(l.nro_factura)}</div>`:""}</td><td>${esc(l.productos||"")}</td><td class="num">${l.unidades}</td><td class="num">${l.disponibles}</td><td class="num">${pesos(l.costo_total)}</td><td style="white-space:nowrap"><button class="btn ghost" data-et="${l.id}">Etiquetas</button>${Number(l.entregadas)===0?`<button class="btn ghost danger" data-del="${l.id}" data-n="${l.lote}">Borrar</button>`:""}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">Todavía no hay compras. Tocá “+ Cargar compra”.</div>`}</div>`;
+  const { data: todos, error } = await sb.from("v_lotes").select("*").order("numero",{ascending:false}).limit(500); if(error) throw error;
+  c.innerHTML = `<div class="search" style="margin-bottom:12px">${ICON.search}<input id="ql" placeholder="Buscar por lote (ej. 200 o L-0200), proveedor, factura o producto" autocomplete="off"></div><div id="lres"></div>`;
+  const pintaL = () => { const q = $("#ql").value.trim().toLowerCase().replace(/^l-?0*/,""); const data = todos.filter(l => !q || String(l.numero).includes(q) || (l.proveedor||"").toLowerCase().includes(q) || (l.nro_factura||"").toLowerCase().includes(q) || (l.productos||"").toLowerCase().includes(q));
+  $("#lres").innerHTML = `<div class="card tight">${data.length?`<div class="tablewrap"><table><thead><tr><th>Lote</th><th>Fecha</th><th>Proveedor</th><th>Productos</th><th class="num">Unid.</th><th class="num">En stock</th><th class="num">Costo</th><th></th></tr></thead><tbody>${data.map(l=>`<tr><td><b>${l.lote}</b></td><td>${fecha(l.fecha)}</td><td>${esc(l.proveedor||"")}${l.nro_factura?`<div class="muted" style="font-size:12.5px">Fact. ${esc(l.nro_factura)}</div>`:""}</td><td>${esc(l.productos||"")}</td><td class="num">${l.unidades}</td><td class="num">${l.disponibles}</td><td class="num">${pesos(l.costo_total)}</td><td style="white-space:nowrap"><button class="btn ghost" data-et="${l.id}">Etiquetas</button>${Number(l.entregadas)===0?`<button class="btn ghost danger" data-del="${l.id}" data-n="${l.lote}">Borrar</button>`:""}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">${todos.length?"Sin resultados.":"Todavía no hay compras. Tocá “+ Cargar compra”."}</div>`}</div>`;
   c.querySelectorAll("[data-et]").forEach(b=>b.onclick=()=>modalEtiquetas(b.dataset.et));
   c.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{ if(!(await confirmar(`¿Borrar el lote ${b.dataset.n} completo? Se borran sus unidades del stock.`))) return;
     const { error } = await sb.from("lotes").delete().eq("id",b.dataset.del); if(error) return fail(error); toast("Lote borrado"); cache.productos=null; render(); });
+  };
+  $("#ql").oninput = pintaL; pintaL();
 }
 function tabBuscarUnidad(c){
   c.innerHTML = `<div class="card"><label class="f">Código de la etiqueta<input id="qu" placeholder="ej. L-0200 000097-01, o solo 000097" autocomplete="off" autocapitalize="characters"></label><div id="ru" style="margin-top:12px"></div></div>`;
@@ -1143,6 +1180,7 @@ async function modalProducto(p){
     ${nuevo?`<p class="wide muted" style="margin:0">Al guardar se le asigna automáticamente un código único de 6 cifras.</p>`:`<p class="wide" style="margin:0">Código de producto: <b><code>${p.codigo_txt}</code></b></p>`}
     <label class="f wide">Nombre<input name="nombre" required value="${esc(p.nombre)}"></label>
     <label class="f">Línea<select name="linea">${["Funcional","Estética"].map(l=>`<option ${p.linea===l?"selected":""}>${l}</option>`).join("")}</select></label>
+    <label class="f">Categoría<select name="categoria" id="pcat">${opcionesCategoria(await categorias(), p.categoria)}</select></label>
     <label class="f">Costo $<input name="costo" type="number" step="any" inputmode="decimal" value="${p.costo??""}"></label>
     <label class="f">Precio de venta $<input name="precio" type="number" step="any" inputmode="decimal" value="${p.precio??""}"></label>
     <label class="f">Stock mínimo (alerta)<input name="stock_minimo" type="number" step="1" min="0" value="${p.stock_minimo??2}"></label>
@@ -1156,7 +1194,8 @@ async function modalProducto(p){
     document.querySelectorAll("[data-desc]").forEach(b=>b.onclick=async()=>{ if(!(await confirmar("¿Descartar esta unidad (vencida, rota, etc.)?"))) return; descartar([b.dataset.desc], "Descartada"); });
     if(vencidas.length) $("#bdescv").onclick = async () => { if(!(await confirmar(`¿Descartar las ${vencidas.length} unidades vencidas?`))) return; descartar(vencidas.map(u=>u.id), "Vencida"); };
   }
-  $("#fpr").onsubmit = async e => { e.preventDefault(); const d=Object.fromEntries(new FormData(e.target)); for(const k in d) if(d[k]==="") d[k]=null;
+  selectCategoria($("#pcat"), p.categoria);
+  $("#fpr").onsubmit = async e => { e.preventDefault(); const d=Object.fromEntries(new FormData(e.target)); for(const k in d) if(d[k]==="" || d[k]==="__nueva") d[k]=null;
     const r = nuevo ? await sb.from("productos").insert(d).select("codigo").single() : await sb.from("productos").update(d).eq("id",p.id);
     if(r.error) return fail(r.error.code==="23505"?"Ya existe un producto con ese nombre en esa línea":r.error);
     cerrarModal(); toast(nuevo?`Producto registrado con el código ${cod6(r.data.codigo)}`:"Producto guardado"); cache.productos=null; render(); };
@@ -1170,7 +1209,8 @@ async function modalCompra(){
   ]);
   const proximo = ult?.length ? ult[0].numero + 1 : 200;
   const proveedores = [...new Set((provs||[]).map(x=>x.proveedor))].sort();
-  let opciones = `<option value="">— elegir producto —</option>` + ["Funcional","Estética"].map(l=>`<optgroup label="${l}">`+prods.filter(x=>x.linea===l).map(x=>`<option value="${x.id}" data-c="${x.costo??""}" data-p="${x.precio??""}">${esc(prodLabel(x))}</option>`).join("")+`</optgroup>`).join("");
+  const extraC = x => `data-c="${x.costo??""}" data-p="${x.precio??""}"`;
+  let opciones = opcionesProductos(prods, null, extraC);
   abrirModal("Cargar compra", `<form id="fc" class="grid">
     <div class="card" style="background:var(--accent-soft);border-color:transparent"><div class="row"><div><div class="muted" style="font-size:13px;font-weight:600">LOTE DE ESTA COMPRA</div><div style="font-family:var(--display);font-size:28px" id="lnum">${lote4(proximo)}</div></div>
       <label class="right" style="display:flex;align-items:center;gap:8px;font-size:14px"><input type="checkbox" id="lprev" style="width:auto;min-height:0"> Es stock anterior (lote previo a L-0200)</label></div>
@@ -1182,7 +1222,7 @@ async function modalCompra(){
     </div>
     <div><h3>Productos de esta compra</h3><p class="muted" style="margin:0 0 6px;font-size:13px">Todos quedan en el mismo lote y con el mismo proveedor. El vencimiento se completa solo a 6 meses de la fecha de compra (podés cambiarlo).</p><div id="cits"></div>
       <div class="row"><button type="button" class="btn ghost" id="caddp">+ Agregar otro producto</button><button type="button" class="btn ghost" id="cnewp">+ Producto nuevo (no registrado)</button></div>
-      <div id="cnewbox" hidden class="card" style="margin-top:8px"><div class="fields"><label class="f">Nombre del producto nuevo<input id="cnn"></label><label class="f">Línea<select id="cnl"><option>Funcional</option><option>Estética</option></select></label></div><div class="row" style="margin-top:8px"><button type="button" class="btn" id="cnc">Cancelar</button><button type="button" class="btn pri right" id="cnok">Registrar y agregar</button></div></div></div>
+      <div id="cnewbox" hidden class="card" style="margin-top:8px"><div class="fields"><label class="f">Nombre del producto nuevo<input id="cnn"></label><label class="f">Línea<select id="cnl"><option>Funcional</option><option>Estética</option></select></label><label class="f">Categoría<select id="cnc2">${opcionesCategoria(await categorias(), "")}</select></label></div><div class="row" style="margin-top:8px"><button type="button" class="btn" id="cnc">Cancelar</button><button type="button" class="btn pri right" id="cnok">Registrar y agregar</button></div></div></div>
     <label style="display:flex;align-items:center;gap:8px;font-size:14px"><input type="checkbox" id="cupd" checked style="width:auto;min-height:0"> Actualizar el costo de cada producto con el de esta compra (el precio de venta cargado también se actualiza)</label>
     <div class="row"><span class="muted" id="cres"></span><button class="btn pri right" type="submit">Guardar compra y ver etiquetas</button></div></form>`);
   const box = $("#cits");
@@ -1207,13 +1247,16 @@ async function modalCompra(){
   agregar();
   $("#caddp").onclick = () => agregar();
   $("#cnewp").onclick = () => { $("#cnewbox").hidden = false; $("#cnn").focus(); };
+  selectCategoria($("#cnc2"), "");
   $("#cnc").onclick = () => { $("#cnewbox").hidden = true; };
   $("#cnok").onclick = async () => { const nombre = $("#cnn").value.trim(); if(!nombre) return toast("Escribí el nombre del producto.");
-    const { data: np, error } = await sb.from("productos").insert({ nombre, linea: $("#cnl").value }).select("id,codigo,nombre,linea").single();
+    const cat = $("#cnc2").value && $("#cnc2").value!=="__nueva" ? $("#cnc2").value : null;
+    const { data: np, error } = await sb.from("productos").insert({ nombre, linea: $("#cnl").value, categoria: cat }).select("id,codigo,nombre,linea,categoria").single();
     if(error) return fail(error.code==="23505"?"Ya existe un producto con ese nombre en esa línea":error);
     const opt = `<option value="${np.id}" data-c="" data-p="">${esc(cod6(np.codigo)+" · "+np.nombre)}</option>`;
-    box.querySelectorAll(".c-prod").forEach(sel => sel.querySelector(`optgroup[label="${np.linea}"]`)?.insertAdjacentHTML("beforeend", opt));
-    opciones = opciones.replace(`<optgroup label="${np.linea}">`, `<optgroup label="${np.linea}">`+opt);
+    prods.push({ ...np, codigo_txt: cod6(np.codigo), stock_actual: 0, costo: null, precio: null, activo: true });
+    opciones = opcionesProductos(prods, null, extraC);
+    box.querySelectorAll(".c-prod").forEach(sel => { const v = sel.value; sel.innerHTML = opciones; sel.value = v; });
     const vacia = [...box.querySelectorAll(".c-prod")].find(sel=>!sel.value);
     if(vacia) vacia.value = np.id; else agregar(np.id);
     $("#cnn").value = ""; $("#cnewbox").hidden = true; cache.productos = null; toast(`Producto registrado con el código ${cod6(np.codigo)}`); };
