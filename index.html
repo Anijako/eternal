@@ -26,11 +26,17 @@
   --display:"Newsreader", Georgia, serif; --body:"Figtree", -apple-system, "Segoe UI", sans-serif;
   --r:14px;
 }
-@media (prefers-color-scheme: dark){ :root{
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
   --bg:#17121A; --surface:#211A24; --surface2:#2A2230; --line:#3A3040;
   --ink:#F2EAF0; --ink2:#B7A6B2; --accent:#D9A6C8; --accent-ink:#2A1224; --accent-soft:#3B2636;
   --ok:#6FCB9F; --ok-soft:#1E3529; --warn:#E8B655; --warn-soft:#3A2E17; --bad:#F2928A; --bad-soft:#3D2120; --info:#8DB4EC; --info-soft:#1D2A3D;
   color-scheme:dark; } }
+:root[data-theme="dark"]{
+  --bg:#17121A; --surface:#211A24; --surface2:#2A2230; --line:#3A3040;
+  --ink:#F2EAF0; --ink2:#B7A6B2; --accent:#D9A6C8; --accent-ink:#2A1224; --accent-soft:#3B2636;
+  --ok:#6FCB9F; --ok-soft:#1E3529; --warn:#E8B655; --warn-soft:#3A2E17; --bad:#F2928A; --bad-soft:#3D2120; --info:#8DB4EC; --info-soft:#1D2A3D;
+  color-scheme:dark; }
+:root[data-theme="light"]{color-scheme:light}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{margin:0;height:100%}
@@ -93,7 +99,8 @@ textarea{min-height:80px;resize:vertical}
 .item .r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .pill{display:inline-block;border-radius:99px;padding:2px 10px;font-size:12.5px;font-weight:600;white-space:nowrap}
 .p-est{background:#F6DDEA;color:#8A2C61}.p-fun{background:#DDEFE5;color:#25694B}.p-amb{background:var(--surface2);color:var(--ink2)}
-@media (prefers-color-scheme: dark){.p-est{background:#43233A;color:#F0B5D8}.p-fun{background:#1F3A2C;color:#9BDDB9}}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .p-est{background:#43233A;color:#F0B5D8}:root:not([data-theme="light"]) .p-fun{background:#1F3A2C;color:#9BDDB9}}
+:root[data-theme="dark"] .p-est{background:#43233A;color:#F0B5D8}:root[data-theme="dark"] .p-fun{background:#1F3A2C;color:#9BDDB9}
 .s-ok{background:var(--ok-soft);color:var(--ok)}.s-warn{background:var(--warn-soft);color:var(--warn)}.s-bad{background:var(--bad-soft);color:var(--bad)}.s-info{background:var(--info-soft);color:var(--info)}.s-none{background:var(--surface2);color:var(--ink2)}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:18px 0 14px;overflow-x:auto}
 .tab{appearance:none;border:none;background:none;padding:10px 14px;font-weight:600;color:var(--ink2);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;min-height:44px}
@@ -216,7 +223,13 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 <body>
 <div id="root"></div>
 <script>
-const APP_VERSION = "2026-11-01l";
+function aplicarTema(t){ if(t==="light"||t==="dark") document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  const m = document.querySelector('meta[name="theme-color"]'); if(m) m.content = (t==="dark" || (t!=="light" && matchMedia("(prefers-color-scheme: dark)").matches)) ? "#17121A" : "#5B2A4C"; }
+let TEMA = "auto"; try{ TEMA = localStorage.getItem("tema") || "auto"; }catch(e){} aplicarTema(TEMA);
+function cambiarTema(){ TEMA = TEMA==="auto" ? "light" : TEMA==="light" ? "dark" : "auto"; try{ localStorage.setItem("tema", TEMA); }catch(e){} aplicarTema(TEMA);
+  document.querySelectorAll(".btema").forEach(b=>b.textContent = etiquetaTema()); toast("Apariencia: " + ({auto:"automática (según el iPad)", light:"fondo claro", dark:"fondo oscuro"}[TEMA])); }
+const etiquetaTema = () => ({auto:"◐ Apariencia: automática", light:"☀ Apariencia: clara", dark:"☾ Apariencia: oscura"}[TEMA]);
+const APP_VERSION = "2026-11-01m";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -314,7 +327,7 @@ const NAV = [["#/","Inicio","home"],["#/agenda","Agenda","cal"],["#/pacientes","
 function shell(){
   const nav = (cls) => NAV.map(([h,t,i]) => `<a class="navbtn" data-h="${h}" href="${h}">${ICON[i]}<span>${t}</span>${i==="stock"&&alertasStock?`<span class="dot">${alertasStock}</span>`:""}</a>`).join("");
   $("#root").innerHTML = `<div class="app">
-    <nav class="side"><div class="brand">Eternal Secret<small>Consultorio</small></div>${nav()}<div class="spacer"></div><button class="btn ghost" id="bout">Salir</button></nav>
+    <nav class="side"><div class="brand">Eternal Secret<small>Consultorio</small></div>${nav()}<div class="spacer"></div><button class="btn ghost btema" onclick="cambiarTema()" style="font-size:14px">${etiquetaTema()}</button><button class="btn ghost" id="bout">Salir</button></nav>
     <main><div class="wrap" id="view"></div></main>
     <nav class="bottom">${nav()}</nav></div>`;
   $("#bout").onclick = () => sb.auth.signOut();
@@ -1588,7 +1601,7 @@ async function vFacturacion(v){
 /* ---------- CATÁLOGOS ---------- */
 async function vAjustes(v){
   const [trats, dets] = await Promise.all([catalogo("tratamientos",true), catalogo("determinaciones",true)]);
-  v.innerHTML = `<h1>Catálogos</h1><p class="sub">Tratamientos con su precio y rangos de laboratorio. Lo que cargues acá se usa en las visitas y en el estado de cada análisis.</p>
+  v.innerHTML = `<div class="row"><h1>Catálogos</h1><button class="btn ghost btema right" onclick="cambiarTema()">${etiquetaTema()}</button></div><p class="sub">Tratamientos con su precio y rangos de laboratorio. Lo que cargues acá se usa en las visitas y en el estado de cada análisis.</p>
     <div class="tabs"><button class="tab on" data-c="t">Tratamientos</button><button class="tab" data-c="k">Categorías de productos</button><button class="tab" data-c="d">Rangos de laboratorio</button><button class="tab" data-c="a">Agenda</button><button class="tab" data-c="b">Copias de seguridad</button></div><div id="cc"></div>`;
   const pintaT = () => { $("#cc").innerHTML = `<div class="row" style="margin-bottom:10px"><button class="btn pri right" id="bnt">+ Tratamiento</button></div><div class="card tight">${trats.length?`<ul class="list">${trats.map(t=>`<li><button class="item" style="width:100%;border:none;background:none;text-align:left;cursor:pointer" data-t="${t.id}"><div class="main"><div class="t">${esc(t.nombre)}${t.activo?"":" <span class='pill s-none'>inactivo</span>"}</div></div>${areaPill(t.area)}<div class="r">${pesos(t.precio)}</div></button></li>`).join("")}</ul>`:`<div class="empty">Cargá los tratamientos que hace (facial, PRP, sueroterapia…) con su precio. Así al cargar una visita se completan solos.</div>`}</div>`;
     $("#bnt").onclick=()=>modalTrat({}); $("#cc").querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>modalTrat(trats.find(x=>x.id===b.dataset.t))); };
