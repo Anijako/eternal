@@ -193,6 +193,8 @@ body.preview #print.print-rollo{display:flex;flex-wrap:wrap;gap:4mm;align-conten
 .inf-tab th{font-size:8pt;text-transform:uppercase;color:#666;border-bottom:1px solid #bbb;padding:4px 6px;text-align:left}
 .inf-tab td{padding:3.5px 6px;border-bottom:1px solid #e6e6e6}
 .inf-tab .num{text-align:right}.inf-tab tr{break-inside:avoid}
+.mx-grp td{background:var(--accent-soft);font-weight:700;color:var(--accent);font-size:13px}
+.mx td.mxv{text-align:center;white-space:nowrap}.mx th.mxv{text-align:center}.mx .mxo{white-space:nowrap}.mx .mxt{text-align:center;font-weight:700}
 .inf-grp td{background:#f2ecf0;font-weight:700;color:#5B2A4C;font-size:9pt;padding-top:5px}
 .inf-est{white-space:nowrap}
 .inf-ley{margin-top:12px;border-top:1px solid #ccc;padding-top:6px;font-size:8.5pt;color:#444;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
@@ -229,7 +231,7 @@ let TEMA = "auto"; try{ TEMA = localStorage.getItem("tema") || "auto"; }catch(e)
 function cambiarTema(){ TEMA = TEMA==="auto" ? "light" : TEMA==="light" ? "dark" : "auto"; try{ localStorage.setItem("tema", TEMA); }catch(e){} aplicarTema(TEMA);
   document.querySelectorAll(".btema").forEach(b=>b.textContent = etiquetaTema()); toast("Apariencia: " + ({auto:"automática (según el iPad)", light:"fondo claro", dark:"fondo oscuro"}[TEMA])); }
 const etiquetaTema = () => ({auto:"◐ Apariencia: automática", light:"☀ Apariencia: clara", dark:"☾ Apariencia: oscura"}[TEMA]);
-const APP_VERSION = "2026-11-09a";
+const APP_VERSION = "2026-11-10a";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -964,6 +966,33 @@ function imprimirEvolucion(p, porDet){
   imprimirHTML(html, "print-doc", "@page{size:A4;margin:12mm 13mm}", `Evolución laboratorio ${p.nombre}`);
 }
 
+/* Cuadro comparativo: últimos 3 laboratorios, con rango óptimo */
+function datosCuadro(data, n=3){
+  const fechas = [...new Set(data.map(r=>r.fecha))].sort().slice(-n);
+  const filas = {}; data.filter(r=>fechas.includes(r.fecha)).forEach(r=>{ const f = (filas[r.determinacion_id] ??= { r0:r, v:{} }); f.v[r.fecha] = r; if(r.fecha >= f.r0.fecha) f.r0 = r; });
+  const L = Object.values(filas).sort((a,b)=>a.r0.orden-b.r0.orden);
+  return { fechas, L, grupos: [...new Set(L.map(x=>x.r0.grupo))] };
+}
+function tendencia(x, fechas){
+  const vs = fechas.map(f=>x.v[f]).filter(Boolean); if(vs.length<2 || CUALI[x.r0.determinacion_id]) return "";
+  const a = Number(vs.at(-2).valor), b = Number(vs.at(-1).valor); if(a===b) return '<span title="Sin cambios">=</span>';
+  const mejora = (e => ({"Óptimo":3,"Normal":2,"Fuera del óptimo":2,"Alto":1,"Bajo":1})[e]||0);
+  const d = mejora(vs.at(-1).estado) - mejora(vs.at(-2).estado);
+  const col = d>0 ? "#2E8B57" : d<0 ? "#C62828" : "#777";
+  return `<span style="color:${col}" title="${d>0?"Mejoró":d<0?"Empeoró":"Cambió sin cambiar de rango"}">${b>a?"↑":"↓"}</span>`;
+}
+function tablaCuadro(c, impreso){
+  const { fechas, L, grupos } = c, cols = 4 + fechas.length;
+  const celda = r => r ? `<td class="mxv">${punto(r.estado)} <b>${valorTxt(r)}</b></td>` : `<td class="mxv" style="color:#bbb">—</td>`;
+  return `<table class="${impreso?"inf-tab":""} mx"><thead><tr><th>Determinación</th><th>Unidad</th><th>Óptimo</th>${fechas.map((f,i)=>`<th class="mxv">${fecha(f)}${i===fechas.length-1?"<br><span style='font-weight:400;text-transform:none'>(último)</span>":""}</th>`).join("")}<th class="mxv">Tend.</th></tr></thead>
+    ${grupos.map(g=>`<tbody><tr class="${impreso?"inf-grp":"mx-grp"}"><td colspan="${cols}">${esc(g)}</td></tr>${L.filter(x=>x.r0.grupo===g).map(x=>`<tr><td>${esc(x.r0.determinacion)}</td><td>${esc(x.r0.unidad||"")}</td><td class="mxo">${CUALI[x.r0.determinacion_id]?"No reactivo":(x.r0.omin!=null||x.r0.omax!=null)?`<b>${rangoTxt(x.r0.omin,x.r0.omax)}</b>`:(x.r0.rmin!=null||x.r0.rmax!=null)?`${rangoTxt(x.r0.rmin,x.r0.rmax)} <span style="font-size:.85em;opacity:.7">(ref.)</span>`:"—"}${x.r0.rango_categoria?`<div class="${impreso?"inf-mut":"muted"}" style="font-size:.85em">${esc(x.r0.rango_categoria)}</div>`:""}</td>${fechas.map(f=>celda(x.v[f])).join("")}<td class="mxt">${tendencia(x,fechas)}</td></tr>`).join("")}</tbody>`).join("")}</table>`;
+}
+function imprimirCuadro(p, c){
+  const html = cabeceraInforme(p, "Cuadro comparativo de laboratorio", `Últimos ${c.fechas.length} análisis · ${fecha(c.fechas[0])} al ${fecha(c.fechas.at(-1))}`) + tablaCuadro(c, true) +
+    `<p class="inf-mut" style="margin-top:6px">Tendencia: compara el último análisis con el anterior. Flecha verde: mejoró de rango · roja: empeoró · gris: cambió dentro del mismo rango. En la columna Óptimo, cuando no hay óptimo cargado se muestra el rango de referencia (ref.). Es el del último análisis${c.L.some(x=>x.r0.rango_categoria)?" (en hormonas, según la fase o la edad indicada)":""}.</p>` + leyendaInforme();
+  imprimirHTML(html, "print-doc", "@page{size:A4;margin:12mm 13mm}", `Cuadro laboratorio ${p.nombre}`);
+}
+
 /* ---------- HISTORIAL DE TRATAMIENTOS ---------- */
 async function datosTratamientos(p){
   const { data, error } = await sb.from("visita_items").select("id,visita_id,tipo,tratamiento_id,producto_id,cantidad,monto,descripcion,observacion,item_padre,tratamientos(nombre,area),productos(nombre,categoria),visitas!inner(paciente_id,fecha,area,observaciones)").eq("visitas.paciente_id", p.id);
@@ -1165,8 +1194,11 @@ async function tabEvolucion(c, p){
   if(!data.length){ c.innerHTML = `<div class="card empty">Cuando haya laboratorios cargados, acá vas a ver cómo evolucionó cada valor.</div>`; return; }
   const porDet = {}; data.forEach(r => (porDet[r.determinacion] ??= []).push(r));
   const orden = Object.values(porDet).sort((a,b)=>a[0].orden-b[0].orden);
-  c.innerHTML = `<div class="row" style="margin-bottom:8px"><p class="muted" style="margin:0;flex:1">Cada gráfico muestra los valores de una determinación en el tiempo. La franja verde es el rango óptimo; las líneas punteadas, el rango de referencia.</p><button class="btn" id="bprevo">Imprimir evolución</button></div><div class="evo">${orden.map(rs=>`<div class="card"><div class="row" style="margin-bottom:6px"><b>${esc(rs[0].determinacion)}</b><span class="pill ${estadoClase(rs.at(-1).estado)} right">${esc(rs.at(-1).estado)}</span></div><div class="muted" style="font-size:13px;margin-bottom:6px">Último: <b style="color:var(--ink)">${valorTxt(rs.at(-1))}</b> ${esc(rs[0].unidad||"")} · ${fecha(rs.at(-1).fecha)}</div>${grafico(rs)}</div>`).join("")}</div>`;
+  const cq = datosCuadro(data);
+  c.innerHTML = `<div class="card tight" style="margin-bottom:14px"><div class="row" style="padding:12px 14px 6px"><div style="flex:1"><b>Cuadro comparativo</b><div class="muted" style="font-size:13px">Últimos ${cq.fechas.length} laboratorios lado a lado, con el rango óptimo.</div></div><button class="btn pri" id="bprcq">Imprimir cuadro</button></div><div class="tablewrap">${tablaCuadro(cq,false)}</div></div>
+    <div class="row" style="margin-bottom:8px"><p class="muted" style="margin:0;flex:1">Cada gráfico muestra los valores de una determinación en el tiempo. La franja verde es el rango óptimo; las líneas punteadas, el rango de referencia.</p><button class="btn" id="bprevo">Imprimir evolución</button></div><div class="evo">${orden.map(rs=>`<div class="card"><div class="row" style="margin-bottom:6px"><b>${esc(rs[0].determinacion)}</b><span class="pill ${estadoClase(rs.at(-1).estado)} right">${esc(rs.at(-1).estado)}</span></div><div class="muted" style="font-size:13px;margin-bottom:6px">Último: <b style="color:var(--ink)">${valorTxt(rs.at(-1))}</b> ${esc(rs[0].unidad||"")} · ${fecha(rs.at(-1).fecha)}</div>${grafico(rs)}</div>`).join("")}</div>`;
   $("#bprevo").onclick = () => imprimirEvolucion(p, orden);
+  $("#bprcq").onclick = () => imprimirCuadro(p, cq);
 }
 function grafico(rs){
   const W=260,H=120,L=34,R=10,T=10,B=22;
