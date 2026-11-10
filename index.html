@@ -229,7 +229,7 @@ let TEMA = "auto"; try{ TEMA = localStorage.getItem("tema") || "auto"; }catch(e)
 function cambiarTema(){ TEMA = TEMA==="auto" ? "light" : TEMA==="light" ? "dark" : "auto"; try{ localStorage.setItem("tema", TEMA); }catch(e){} aplicarTema(TEMA);
   document.querySelectorAll(".btema").forEach(b=>b.textContent = etiquetaTema()); toast("Apariencia: " + ({auto:"automática (según el iPad)", light:"fondo claro", dark:"fondo oscuro"}[TEMA])); }
 const etiquetaTema = () => ({auto:"◐ Apariencia: automática", light:"☀ Apariencia: clara", dark:"☾ Apariencia: oscura"}[TEMA]);
-const APP_VERSION = "2026-11-01m";
+const APP_VERSION = "2026-11-09a";
 async function chequearVersion(){ try{ const r = await fetch("version.json?_=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).version;
   if(v && v !== APP_VERSION && sessionStorage.getItem("recargado") !== v){ sessionStorage.setItem("recargado", v); location.replace(location.pathname + "?v=" + v + location.hash); } }catch(e){} }
 chequearVersion(); document.addEventListener("visibilitychange", () => { if(!document.hidden) chequearVersion(); });
@@ -1247,8 +1247,9 @@ async function tabLotes(c){
   const { data: todos, error } = await sb.from("v_lotes").select("*").order("numero",{ascending:false}).limit(500); if(error) throw error;
   c.innerHTML = `<div class="search" style="margin-bottom:12px">${ICON.search}<input id="ql" placeholder="Buscar por lote (ej. 200 o L-0200), proveedor, factura o producto" autocomplete="off"></div><div id="lres"></div>`;
   const pintaL = () => { const q = $("#ql").value.trim().toLowerCase().replace(/^l-?0*/,""); const data = todos.filter(l => !q || String(l.numero).includes(q) || (l.proveedor||"").toLowerCase().includes(q) || (l.nro_factura||"").toLowerCase().includes(q) || (l.productos||"").toLowerCase().includes(q));
-  $("#lres").innerHTML = `<div class="card tight">${data.length?`<div class="tablewrap"><table><thead><tr><th>Lote</th><th>Fecha</th><th>Proveedor</th><th>Productos</th><th class="num">Unid.</th><th class="num">En stock</th><th class="num">Costo</th><th></th></tr></thead><tbody>${data.map(l=>`<tr><td><b>${l.lote}</b></td><td>${fecha(l.fecha)}</td><td>${esc(l.proveedor||"")}${l.nro_factura?`<div class="muted" style="font-size:12.5px">Fact. ${esc(l.nro_factura)}</div>`:""}</td><td>${esc(l.productos||"")}</td><td class="num">${l.unidades}</td><td class="num">${l.disponibles}</td><td class="num">${pesos(l.costo_total)}</td><td style="white-space:nowrap"><button class="btn ghost" data-et="${l.id}">Etiquetas</button>${Number(l.entregadas)===0?`<button class="btn ghost danger" data-del="${l.id}" data-n="${l.lote}">Borrar</button>`:""}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">${todos.length?"Sin resultados.":"Todavía no hay compras. Tocá “+ Cargar compra”."}</div>`}</div>`;
+  $("#lres").innerHTML = `<div class="card tight">${data.length?`<div class="tablewrap"><table><thead><tr><th>Lote</th><th>Fecha</th><th>Proveedor</th><th>Productos</th><th class="num">Unid.</th><th class="num">En stock</th><th class="num">Costo</th><th></th></tr></thead><tbody>${data.map(l=>`<tr><td><b>${l.lote}</b></td><td>${fecha(l.fecha)}</td><td>${esc(l.proveedor||"")}${l.nro_factura?`<div class="muted" style="font-size:12.5px">Fact. ${esc(l.nro_factura)}</div>`:""}</td><td>${esc(l.productos||"")}</td><td class="num">${l.unidades}</td><td class="num">${l.disponibles}</td><td class="num">${pesos(l.costo_total)}</td><td style="white-space:nowrap"><button class="btn ghost" data-ed="${l.id}">Editar</button><button class="btn ghost" data-et="${l.id}">Etiquetas</button>${Number(l.entregadas)===0?`<button class="btn ghost danger" data-del="${l.id}" data-n="${l.lote}">Borrar</button>`:""}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">${todos.length?"Sin resultados.":"Todavía no hay compras. Tocá “+ Cargar compra”."}</div>`}</div>`;
   c.querySelectorAll("[data-et]").forEach(b=>b.onclick=()=>modalEtiquetas(b.dataset.et));
+  c.querySelectorAll("[data-ed]").forEach(b=>b.onclick=()=>editarCompra(b.dataset.ed));
   c.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{ if(!(await confirmar(`¿Borrar el lote ${b.dataset.n} completo? Se borran sus unidades del stock.`))) return;
     const { error } = await sb.from("lotes").delete().eq("id",b.dataset.del); if(error) return fail(error); toast("Lote borrado"); cache.productos=null; render(); });
   };
@@ -1299,7 +1300,17 @@ async function modalProducto(p){
     cerrarModal(); toast(nuevo?`Producto registrado con el código ${cod6(r.data.codigo)}`:"Producto guardado"); cache.productos=null; render(); };
 }
 
-async function modalCompra(pre=null){
+async function editarCompra(loteId){
+  const [{ data: lote, error }, { data: cps, error: e2 }, { data: us, error: e3 }] = await Promise.all([
+    sb.from("lotes").select("*").eq("id",loteId).single(),
+    sb.from("compras").select("*").eq("lote_id",loteId).order("creado"),
+    sb.from("unidades").select("compra_id,estado").eq("lote_id",loteId)
+  ]);
+  if(error||e2||e3) return fail(error||e2||e3);
+  const usadas = {}; (us||[]).forEach(u=>{ if(u.estado!=="Disponible") usadas[u.compra_id]=(usadas[u.compra_id]||0)+1; });
+  modalCompra(null, { ...lote, items: cps.map(c=>({ ...c, usadas: usadas[c.id]||0 })) });
+}
+async function modalCompra(pre=null, ed=null){
   const prods = (await catalogo("productos", true)).filter(x=>x.activo);
   const [{ data: ult }, { data: provs }] = await Promise.all([
     sb.from("lotes").select("numero").gte("numero",200).order("numero",{ascending:false}).limit(1),
@@ -1310,24 +1321,25 @@ async function modalCompra(pre=null){
   const proveedores = [...new Set([...(provs||[]), ...(provPed||[])].map(x=>x.proveedor).filter(Boolean))].sort();
   const extraC = x => `data-c="${x.costo??""}" data-p="${x.precio??""}"`;
   let opciones = opcionesProductos(prods, null, extraC);
-  abrirModal(pre ? `Recibir pedido N° ${pre.numero} · ${pre.proveedor}` : "Cargar compra", `<form id="fc" class="grid">
+  abrirModal(ed ? `Editar compra ${lote4(ed.numero)}` : pre ? `Recibir pedido N° ${pre.numero} · ${pre.proveedor}` : "Cargar compra", `<form id="fc" class="grid">
+    ${ed ? `<p class="muted" style="margin:0">Corregí lo que haga falta. El número de lote no cambia, así las etiquetas ya pegadas siguen valiendo. Si subís una cantidad se crean unidades nuevas (con etiqueta nueva); si la bajás se quitan las últimas unidades disponibles. Lo que ya se entregó a un paciente o se descartó no se puede quitar.</p>` : ""}
     ${pre ? `<p class="muted" style="margin:0">Revisá las cantidades que llegaron y los costos reales. Si algo no llegó, poné la cantidad recibida o quitá el renglón: el pedido queda como “Parcial” con lo que falta.</p>` : ""}
-    <div class="card" style="background:var(--accent-soft);border-color:transparent"><div class="row"><div><div class="muted" style="font-size:13px;font-weight:600">LOTE DE ESTA COMPRA</div><div style="font-family:var(--display);font-size:28px" id="lnum">${lote4(proximo)}</div></div>
-      <label class="right" style="display:flex;align-items:center;gap:8px;font-size:14px"><input type="checkbox" id="lprev" style="width:auto;min-height:0"> Es stock anterior (lote previo a L-0200)</label></div>
+    <div class="card" style="background:var(--accent-soft);border-color:transparent"><div class="row"><div><div class="muted" style="font-size:13px;font-weight:600">LOTE DE ESTA COMPRA</div><div style="font-family:var(--display);font-size:28px" id="lnum">${lote4(ed?ed.numero:proximo)}</div></div>
+      <label ${ed?"hidden":""} class="right" style="display:flex;align-items:center;gap:8px;font-size:14px"><input type="checkbox" id="lprev" style="width:auto;min-height:0"> Es stock anterior (lote previo a L-0200)</label></div>
       <label class="f" id="lprevbox" hidden style="margin-top:8px">Número de lote anterior (1 a 199)<input id="lprevnum" type="number" min="1" max="199" inputmode="numeric"></label></div>
     <div class="fields">
-      <label class="f">Fecha de compra<input name="fecha" type="date" required value="${hoy()}"></label>
-      <label class="f">Proveedor (uno por compra)<input name="proveedor" list="provl" required autocomplete="off"><datalist id="provl">${proveedores.map(p=>`<option>${esc(p)}</option>`).join("")}</datalist></label>
-      <label class="f">N° de factura (opcional)<input name="nro_factura"></label>
+      <label class="f">Fecha de compra<input name="fecha" type="date" required value="${ed?ed.fecha:hoy()}"></label>
+      <label class="f">Proveedor (uno por compra)<input name="proveedor" list="provl" required autocomplete="off" value="${ed?esc(ed.proveedor||""):""}"><datalist id="provl">${proveedores.map(p=>`<option>${esc(p)}</option>`).join("")}</datalist></label>
+      <label class="f">N° de factura (opcional)<input name="nro_factura" value="${ed?esc(ed.nro_factura||""):""}"></label>
     </div>
     <div><h3>Productos de esta compra</h3><p class="muted" style="margin:0 0 6px;font-size:13px">Todos quedan en el mismo lote y con el mismo proveedor. El vencimiento se completa solo a 6 meses de la fecha de compra (podés cambiarlo).</p><div id="cits"></div>
       <div class="row"><button type="button" class="btn ghost" id="caddp">+ Agregar otro producto</button><button type="button" class="btn ghost" id="cnewp">+ Producto nuevo (no registrado)</button></div>
       <div id="cnewbox" hidden class="card" style="margin-top:8px"><div class="fields"><label class="f">Nombre del producto nuevo<input id="cnn"></label><label class="f">Línea<select id="cnl"><option>Funcional</option><option>Estética</option></select></label><label class="f">Categoría<select id="cnc2">${opcionesCategoria(await categorias(), "")}</select></label></div><div class="row" style="margin-top:8px"><button type="button" class="btn" id="cnc">Cancelar</button><button type="button" class="btn pri right" id="cnok">Registrar y agregar</button></div></div></div>
-    <label style="display:flex;align-items:center;gap:8px;font-size:14px"><input type="checkbox" id="cupd" checked style="width:auto;min-height:0"> Actualizar el costo de cada producto con el de esta compra (el precio de venta cargado también se actualiza)</label>
-    <div class="row"><span class="muted" id="cres"></span><button class="btn pri right" type="submit">Guardar compra y ver etiquetas</button></div></form>`);
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px"><input type="checkbox" id="cupd" ${ed?"":"checked"} style="width:auto;min-height:0"> Actualizar el costo de cada producto con el de esta compra (el precio de venta cargado también se actualiza)</label>
+    <div class="row"><span class="muted" id="cres"></span><button class="btn pri right" type="submit">${ed?"Guardar cambios":"Guardar compra y ver etiquetas"}</button></div></form>`);
   const box = $("#cits");
   const resumen = () => { let u=0, t=0; box.querySelectorAll(".citem").forEach(r=>{ const q=+$(".c-cant",r).value||0; u+=q; t+=q*(+$(".c-cost",r).value||0); }); $("#cres").textContent = `${u} unidades · ${u} etiquetas · costo ${pesos(t)}`; };
-  const agregar = (prodId, cant, costo) => {
+  const agregar = (prodId, cant, costo, x = {}) => {
     box.insertAdjacentHTML("beforeend", `<div class="itemrow citem" style="grid-template-columns:minmax(160px,1fr) 70px 105px 105px 90px 40px">
       <label class="f">Producto<select class="c-prod" required>${opciones}</select></label>
       <label class="f">Cant.<input class="c-cant" type="number" min="1" step="1" inputmode="numeric" required value="1"></label>
@@ -1336,17 +1348,21 @@ async function modalCompra(pre=null){
       <label class="f">Vto. (MM/AA)<input class="c-vto" inputmode="numeric" placeholder="MM/AA" maxlength="5" required value="${sumarMeses($("#fc [name=fecha]").value||hoy(),6)}"></label>
       <button type="button" class="iconbtn x" title="Quitar">×</button></div>`);
     const r = box.lastElementChild;
+    if(x.compra_id){ r.dataset.compra = x.compra_id; r.dataset.cantOrig = cant; if(x.usadas){ $(".c-cant",r).min = x.usadas; r.insertAdjacentHTML("beforeend", `<p class="muted" style="grid-column:1/-1;margin:-4px 0 0;font-size:12.5px">${x.usadas} unidad(es) ya entregada(s) o descartada(s): la cantidad no puede bajar de ${x.usadas} y no se puede cambiar el producto.</p>`); $(".c-prod",r).disabled = true; } }
     mascaraMMAA($(".c-vto",r)); $(".c-vto",r).oninput = () => { $(".c-vto",r).dataset.tocado = 1; };
     $(".c-vto",r).addEventListener("input", () => r.querySelector(".c-vto").dataset.tocado = 1);
     $(".c-prod",r).onchange = e => { const o=e.target.selectedOptions[0]; if(o?.dataset.c) $(".c-cost",r).value=o.dataset.c; if(o?.dataset.p) $(".c-pv",r).value=o.dataset.p; resumen(); };
     if(prodId){ $(".c-prod",r).value = prodId; $(".c-prod",r).onchange({target:$(".c-prod",r)}); r.dataset.prod = prodId; }
     if(cant) $(".c-cant",r).value = cant;
     if(costo!=null && costo!=="") $(".c-cost",r).value = costo;
+    if(x.compra_id){ $(".c-cost",r).value = costo ?? ""; $(".c-pv",r).value = x.precio_venta ?? ""; }
+    if(x.vencimiento){ $(".c-vto",r).value = mmaa(x.vencimiento); $(".c-vto",r).dataset.tocado = 1; }
     $(".c-cant",r).oninput = $(".c-cost",r).oninput = resumen;
-    $(".x",r).onclick = () => { if(box.children.length>1){ r.remove(); resumen(); } };
+    $(".x",r).onclick = () => { if(x.usadas) return toast("Este producto tiene unidades entregadas o descartadas: no se puede quitar de la compra."); if(box.querySelectorAll(".citem").length>1){ r.remove(); resumen(); } };
     resumen();
   };
-  if(pre){ $("#fc [name=proveedor]").value = pre.proveedor; pre.items.forEach(i=>agregar(i.producto_id, i.cantidad, i.costo)); } else agregar();
+  if(ed){ ed.items.forEach(c=>agregar(c.producto_id, c.cantidad, c.costo_unitario, { compra_id: c.id, usadas: c.usadas, precio_venta: c.precio_venta, vencimiento: c.vencimiento })); }
+  else if(pre){ $("#fc [name=proveedor]").value = pre.proveedor; pre.items.forEach(i=>agregar(i.producto_id, i.cantidad, i.costo)); } else agregar();
   $("#caddp").onclick = () => agregar();
   $("#cnewp").onclick = () => { $("#cnewbox").hidden = false; $("#cnn").focus(); };
   selectCategoria($("#cnc2"), "");
@@ -1374,9 +1390,17 @@ async function modalCompra(pre=null){
       const venc = mmaaAFecha($(".c-vto",r).value); if(!venc) return toast("Revisá el vencimiento: tiene que ser MM/AA, por ejemplo 04/27.");
       const cant = +$(".c-cant",r).value; if(!(cant>=1 && Number.isInteger(cant))) return toast("La cantidad tiene que ser un número entero.");
       if(!$(".c-prod",r).value) return toast("Elegí el producto en cada renglón (o quitá el renglón vacío).");
-      items.push({ producto_id: $(".c-prod",r).value, cantidad: cant, costo_unitario: $(".c-cost",r).value || null, precio_venta: $(".c-pv",r).value || null, vencimiento: venc, actualizar_costo: $("#cupd").checked });
+      items.push({ compra_id: r.dataset.compra || null, producto_id: $(".c-prod",r).value, cantidad: cant, costo_unitario: $(".c-cost",r).value || null, precio_venta: $(".c-pv",r).value || null, vencimiento: venc, actualizar_costo: $("#cupd").checked });
     }
     const btn = e.target.querySelector("[type=submit]"); btn.disabled = true;
+    if(ed){
+      const { error } = await sb.rpc("editar_compra", { p_lote: ed.id, p_fecha: f.fecha, p_proveedor: f.proveedor.trim(), p_factura: f.nro_factura || null, p_items: items });
+      btn.disabled = false; if(error) return fail(error);
+      const nuevas = [...box.querySelectorAll(".citem")].some(r => !r.dataset.compra || +$(".c-cant",r).value > +r.dataset.cantOrig || $(".c-prod",r).value !== (ed.items.find(c=>c.id===r.dataset.compra)||{}).producto_id);
+      cache.productos = null; toast(`Compra ${lote4(ed.numero)} corregida`); render();
+      if(nuevas){ toast("Hay unidades nuevas: imprimí sus etiquetas"); modalEtiquetas(ed.id); } else cerrarModal();
+      return;
+    }
     const { data, error } = await sb.rpc("registrar_compra", { p_fecha: f.fecha, p_proveedor: f.proveedor.trim(), p_factura: f.nro_factura || null, p_numero: numero, p_items: items });
     btn.disabled = false; if(error) return fail(error);
     if(pre){ // actualizar el pedido con lo recibido
